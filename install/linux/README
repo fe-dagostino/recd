@@ -1,0 +1,22 @@
+How to Install Recorder deamon
+
+1. log as root
+2. execute ./install.sh
+
+The script will install the program in /home/recd   
+
+/home/recd
+|
+|- bin 
+|- cfg
+
+"bin" subdir will contains recd, recd_d and recd.cron
+-recd      : is the deamon compiled in release mode
+-recd.cron : used to create a cron job, this script will check for the process recd and if not running it will be executed.
+
+"cfg" subir will contains recd.cfg 
+-recd.cfg  : configuration file for recording deamon
+
+The install.sh script also create a sub folder in  /etc/ named recd and in that subfolder just a simbolic link to -> recd.cfg
+
+A new user will be added to the system "recd". 

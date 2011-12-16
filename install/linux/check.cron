@@ -1,0 +1,9 @@
+#!/bin/bash
+
+PID=`pgrep -u recd recd`
+
+if [ -z "${PID}" ]
+then
+ /opt/recd/bin/recd >> /dev/null 
+fi
+
