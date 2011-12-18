@@ -17,6 +17,9 @@ IF( CMAKE_BUILD_TYPE STREQUAL "Debug" )
   set(  RECD_VERSION
         -debug
      )
+  set(  RECD_CLI_VERSION
+        -1.0.0-debug
+     )
   set(  LIBAVCPP_VER
 	-1.0.0-debug
     )
@@ -26,8 +29,11 @@ IF( CMAKE_BUILD_TYPE STREQUAL "Debug" )
 ELSE()
   set(  RECD_VERSION
      )
+  set(  RECD_CLI_VERSION
+        -1.0.0
+     )
   set(  LIBAVCPP_VER
-	-1.0.0-debug
+	-1.0.0
     )
   set(  FEDLIB_VER
         -3.0.0
@@ -55,8 +61,13 @@ set(  RECD_INCLUDE
         ./include/COMMANDS/RecdGetVersion.h
         ./include/COMMANDS/RecdStartRecording.h
         ./include/COMMANDS/RecdStopRecording.h
+        ./include/COMMANDS/RecdEstimateTime.h
 )
 
+set(  RECD_CLI_INCLUDE
+        ./include/RecdParser.h
+        ./include/RecdClient.h
+)
 
 set(  RECD_SRC   
         ./src/main.cpp
@@ -72,6 +83,16 @@ set(  RECD_SRC
         ./src/RecdReaderCollector.cpp
         ./src/RecdStreamEncoder.cpp
         ./src/RecdEncoderCollector.cpp
+)
+
+set(  RECD_CLI_SRC
+        ./src/RecdParser.cpp
+        ./src/RecdClient.cpp
+)
+
+set(  RECD_CLI_LIBRARIES
+      pthread
+      fedlibrary${FEDLIB_VER}
 )
 
 set(  RECD_LIBRARIES
@@ -100,7 +121,12 @@ add_definitions(
 		)
 
 
-add_executable( recd${RECD_VERSION}         ${RECD_SRC} )
+add_library   ( recdclient${RECD_CLI_VERSION}  SHARED ${RECD_CLI_SRC} )
+add_executable( recd${RECD_VERSION}                   ${RECD_SRC}     )
 
-target_link_libraries( recd${RECD_VERSION}  ${RECD_LIBRARIES} )
 
+target_link_libraries( recdclient${RECD_CLI_VERSION}  ${RECD_CLI_LIBRARIES} )
+target_link_libraries( recd${RECD_VERSION}            ${RECD_LIBRARIES}     )
+
+install( TARGETS recdclient${RECD_CLI_VERSION}  LIBRARY DESTINATION /usr/local/lib )
+install( FILES   ${RECD_CLI_INCLUDE} DESTINATION /usr/include/librecdcli )
