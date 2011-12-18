@@ -38,7 +38,7 @@ class RecdStartRecording : public IRecdCommand
 public:
   /***/
   RecdStartRecording( )
-    : IRecdCommand( "START RECORDING", 1 )
+    : IRecdCommand( "START RECORDING", 5 )
   {}
 
   /***/
@@ -64,11 +64,22 @@ public:
     RecdResult& _rResults = (RecdResult&)rResults;
     RciResponse _retVal   = rciOk;                        //Default value
 
-    FString  _sDstPath = rArgs[0].Trim();
+    FString _sDstPath1   = rArgs[0].Trim();
+    FString _sDstPath2   = rArgs[1].Trim();
+    FString _sRender     = rArgs[2].Trim();
+    FString _sHighlights = rArgs[3].Trim();
+    FString _sRaw        = rArgs[4].Trim();
+
+    
     BOOL     _bExist   = TRUE;
+    
     FTRY
     {
-      _bExist = FFile::Exist( _sDstPath, NULL );
+      if ( _sDstPath1 != "NULL" )
+	_bExist = FFile::Exist( _sDstPath1, NULL );
+      
+      if ( (_bExist == TRUE) && ( _sDstPath2 != "NULL" ) )
+	_bExist = FFile::Exist( _sDstPath2, NULL );
     }
     FCATCH( FFileSystemException, ex )
     {
@@ -83,7 +94,7 @@ public:
 	// Start reading each cam
 	RecdReaderCollector::GetInstance().SetReading   ( TRUE );
 	// Start rendering both single video and mixed video.
-	RecdEncoderCollector::GetInstance().StartRecording( _sDstPath );
+	RecdEncoderCollector::GetInstance().StartRecording( _sDstPath1 );
     }
     else
     {
