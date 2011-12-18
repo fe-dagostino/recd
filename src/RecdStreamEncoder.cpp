@@ -142,7 +142,7 @@ BOOL	RecdStreamEncoder::Final()
 
 VOID	RecdStreamEncoder::Run()
 {
-  double      _dFPS = 0.03333;
+  double      _dFPS     = 0.03333;
   
   while ( !m_bExit )
   {
@@ -199,7 +199,7 @@ VOID	RecdStreamEncoder::Run()
       {
 	FString _sCameraName  = m_rStreamReader.GetCameraName();
 	
-	FString _sOutFilename( 0, "%s/%s_%05d.mp4", (const char*)m_sDestination, (const char*)_sCameraName, 1 ); 
+	FString _sOutFilename( 0, "%s/%s_%010d.mp4", (const char*)m_sDestination, (const char*)_sCameraName, time(NULL) ); 
 	
 	m_pAVEncoder = new CAVEncoder();
 	if ( m_pAVEncoder == NULL )

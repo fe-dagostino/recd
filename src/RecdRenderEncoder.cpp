@@ -125,7 +125,7 @@ VOID	RecdRenderEncoder::Run()
     { 
       if ( m_pAVEncoder == NULL )
       {
-	FString _sOutFilename( 0, "%s/RENDER_%05d.mp4", (const char*)m_sDestination, 1 ); 
+	FString _sOutFilename( 0, "%s/RENDER_%010d.mp4", (const char*)m_sDestination, time(NULL) ); 
 	
 	m_pAVEncoder = new CAVEncoder();
 	if ( m_pAVEncoder == NULL )
