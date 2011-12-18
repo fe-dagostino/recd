@@ -34,6 +34,7 @@
 #include "COMMANDS/RecdGetVersion.h"
 #include "COMMANDS/RecdStartRecording.h"
 #include "COMMANDS/RecdStopRecording.h"
+#include "COMMANDS/RecdEstimateTime.h"
 
 
 USING_NAMESPACE_LOGGING
@@ -60,6 +61,7 @@ BOOL RecdCmdServer::Initialize()
   m_rciServer.GetCommandCollector().Register( new RecdGetVersion( m_rService  )    );
   m_rciServer.GetCommandCollector().Register( new RecdStartRecording()             );
   m_rciServer.GetCommandCollector().Register( new RecdStopRecording()              );
+  m_rciServer.GetCommandCollector().Register( new RecdEstimateTime()               );
     
   IConnectionFactory*  _pIConnectionFactory	= new FTcpConnectionFactory();
   if ( _pIConnectionFactory == NULL )
