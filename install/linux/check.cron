@@ -4,6 +4,6 @@ PID=`pgrep -u recd recd`
 
 if [ -z "${PID}" ]
 then
- /opt/recd/bin/recd >> /dev/null 
+ /home/recd/bin/recd >> /dev/null 
 fi
 
