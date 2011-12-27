@@ -48,15 +48,17 @@ public:
   {  
     //      01234567890123456789012345678901234567890123456789012345678901234567890123456789
     //      01234567890123456789012345
-    return "estimate time(<size gb>,    Return the amoutn of time for required services.\n"
-           "          <render>,         Size should be in Gigabite. Services should be\n"
-           "          <highlights>      a value 0 (Zero) or 1 (One) where 1 meand that\n"     
-           "          <raw>)            serice is required as part of estimation.\n";     
+    return "estimate time(<size gb>, <render>, <highlights>, <raw>);\r\n"
+           "                          Return the amoutn of time for required services.\r\n"
+           "                          Size should be in Gigabite. Services should be\r\n"
+           "                          a value 0 (Zero) or 1 (One) where 1 means that\r\n"     
+           "                          service is required as part of estimation.";     
   }
 
   FString            Help() const
   { 
-    return " Usage:\r\n"
+    return "\r\n"
+           " Usage:\r\n"
            "    estimate time( size, 1, 0, 0 );\r\n";
   }
 
