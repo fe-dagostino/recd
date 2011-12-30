@@ -49,13 +49,14 @@ public:
   {  
     //      01234567890123456789012345678901234567890123456789012345678901234567890123456789
     //      01234567890123456789012345
-    return "start recording( ,   Return the list of all available commands.\n"
-           "            <destination>)";     
+    return "start recording( <dest. 1>,<dest. 2>,<render>,<highlights>,<raw>);\r\n"
+           "                          Initialize streaming files for specified services.";
   }
 
   FString            Help() const
   { 
-    return " Usage:\r\n"
+    return "\r\n"
+           " Usage:\r\n"
            "    start recording( destination );\r\n";
   }
 
@@ -94,7 +95,7 @@ public:
 	// Start reading each cam
 	RecdReaderCollector::GetInstance().SetReading   ( TRUE );
 	// Start rendering both single video and mixed video.
-	RecdEncoderCollector::GetInstance().StartRecording( _sDstPath1 );
+	RecdEncoderCollector::GetInstance().StartRecording( _sDstPath1, (_sRender=="1"), (_sHighlights=="1"), (_sRaw=="1") );
     }
     else
     {
