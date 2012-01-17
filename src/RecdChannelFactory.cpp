@@ -19,14 +19,26 @@
 
 
 #include "RecdChannelFactory.h"
-
+#include "IThreadFactory.h"
 
 GENERATE_CLASSINFO( RecdChannelFactory, FChannelFactory )
 
+// Threads coming from RCI runs in concurrency with render thread that are 
+// all with TP_CRITICAL priority. Creating RCI thread with the same priority
+// will force the scheduler to provide the same cpu time occupation avoiding
+// RCI threads from waiting long time before to be served.
+class RecdThreadFactory : public IThreadFactory
+{
+public:
+  FThread*	Create( IRunnable* pRunnable )
+  {
+    return new FThread( NULL, pRunnable, FThread::TP_CRITICAL, 1024 );
+  }
+};
 
 FChannel*	RecdChannelFactory::CreateChannel( IConnection* pIConnection ) const
 {
-  return new RecdChannel( pIConnection );
+  return new RecdChannel( pIConnection, new RecdThreadFactory() );
 }
 
 
