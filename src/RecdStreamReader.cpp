@@ -22,6 +22,8 @@
 #include "RecdConfig.h"
 #include "LOGGING/FLogger.h"
 
+#include "avimage.h"
+
 
 GENERATE_CLASSINFO( RecdStreamReader, FLogThread ) 
 
@@ -36,37 +38,60 @@ RecdStreamReader::RecdStreamReader(
    m_pAvReader( NULL ),
    m_bGotKeyFrame( FALSE ),
    m_dStopWatchCMP( 0.0 ),
-   m_pMbxFrames( NULL )
+   m_pMbxRawFrames( NULL ),
+   m_pMbxHighLightsFrames( NULL )
 {
   (GET_LOG_MAILBOX())->SetLogMessageFlags( GetLogMessageFlags()     );
   (GET_LOG_MAILBOX())->SetVerbosityFlags ( GetVerbosityLevelFlags() );  
   
-  m_pMbxFrames = new FTMailbox<CAVImage* >( "Mailbox Decoding Frames", NULL );
-  if ( m_pMbxFrames == NULL )
+  m_pMbxRawFrames = new FTMailbox<CAVFrame* >( "Mailbox Decoding Frames", NULL );
+  if ( m_pMbxRawFrames == NULL )
   {
     ERROR_INFO( "Not Enough Memory for allocating Mailbox", RecdStreamReader() )
     //@todo
   }
-  
+
+  m_pMbxHighLightsFrames = new FTMailbox<CAVFrame* >( "Mailbox Decoding Frames", NULL );
+  if ( m_pMbxHighLightsFrames == NULL )
+  {
+    ERROR_INFO( "Not Enough Memory for allocating Mailbox", RecdStreamReader() )
+    //@todo
+  }
+
   // Initialize stop watch.
   m_swStopReading.Reset();
 }
 
 RecdStreamReader::~RecdStreamReader()
 {
-  if ( m_pMbxFrames != NULL )
+  if ( m_pMbxRawFrames != NULL )
   {
     LOG_INFO( "Release mailbox resources", ~RecdStreamReader() )
     // Delete all allocated items
-    while ( !m_pMbxFrames->IsEmpty() )
+    while ( !m_pMbxRawFrames->IsEmpty() )
     {
-      CAVImage* pFrame = m_pMbxFrames->Read();
+      CAVFrame* pFrame = m_pMbxRawFrames->Read();
       delete pFrame;
     }
     
     // Release mailbox.
-    delete m_pMbxFrames;
-    m_pMbxFrames = NULL;
+    delete m_pMbxRawFrames;
+    m_pMbxRawFrames = NULL;
+  }
+  
+  if ( m_pMbxHighLightsFrames != NULL )
+  {
+    LOG_INFO( "Release mailbox resources", ~RecdStreamReader() )
+    // Delete all allocated items
+    while ( !m_pMbxHighLightsFrames->IsEmpty() )
+    {
+      CAVFrame* pFrame = m_pMbxHighLightsFrames->Read();
+      delete pFrame;
+    }
+    
+    // Release mailbox.
+    delete m_pMbxHighLightsFrames;
+    m_pMbxHighLightsFrames = NULL;
   }
 }
 
@@ -75,21 +100,39 @@ const FString&  RecdStreamReader::GetCameraName() const
   return m_sIpCamera;
 }
   
-CAVImage* 	RecdStreamReader::GetFrame( DWORD dwTimeout, BOOL bRemove )
+CAVFrame* 	RecdStreamReader::GetRawFrame( DWORD dwTimeout, BOOL bRemove )
 {
-  if ( m_pMbxFrames == NULL )
+  if ( m_pMbxRawFrames == NULL )
     return NULL;
   
-  return m_pMbxFrames->Read( dwTimeout, bRemove );
+  return m_pMbxRawFrames->Read( dwTimeout, bRemove );
 }
 
-VOID 	 	RecdStreamReader::ReleaseFrame( CAVImage*& pImage )
+CAVFrame* 	RecdStreamReader::GetHighLightsFrame( DWORD dwTimeout, BOOL bRemove )
 {
-  if ( pImage == NULL )
+  if ( m_pMbxHighLightsFrames == NULL )
+    return NULL;
+  
+  return m_pMbxHighLightsFrames->Read( dwTimeout, bRemove );
+}
+
+DWORD 	 	RecdStreamReader::GetRawMailboxSize() const
+{
+  return m_pMbxRawFrames->GetSize();
+}
+
+DWORD 	 	RecdStreamReader::GetHighLightsMailboxSize() const
+{
+  return m_pMbxHighLightsFrames->GetSize();
+}
+
+VOID 	 	RecdStreamReader::ReleaseFrame( CAVFrame*& pAVFrame )
+{
+  if ( pAVFrame == NULL )
     return ;
   
-  delete pImage;
-  pImage = NULL;
+  delete pAVFrame;
+  pAVFrame = NULL;
 }
 
 VOID   RecdStreamReader::SetReading( BOOL bEnable )
@@ -141,27 +184,57 @@ bool   RecdStreamReader::OnVideoFrame(
 {
   if ( m_bGotKeyFrame == TRUE )
   {
-    if ( m_pMbxFrames->GetSize() >= RecdConfig::GetInstance().GetReaderMaxItems( m_sIpCamera, NULL ) )
+    if ( m_pMbxRawFrames->GetSize() >= RecdConfig::GetInstance().GetReaderMaxItems( m_sIpCamera, NULL ) )
     {
       ERROR_INFO( "Consumer Thread is TOO SLOW queue is full.", OnVideoFrame() )
       return true;
     }
     
-    CAVImage*  _pAVImage = new CAVImage();
+    CAVImage*  _pAVRawImage      = new CAVImage();
+    _pAVRawImage->init( 
+	    pAVFrame, 
+	    pAVCodecCtx,
+	    -1,
+	    -1, 
+	    PIX_FMT_YUV420P, 
+	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL ) 
+	);
+
+    m_pMbxRawFrames->Write       ( new CAVFrame( _pAVRawImage      ) );
+
     
-    _pAVImage->init( 
-		      pAVFrame, 
-		      pAVCodecCtx, -1, -1, PIX_FMT_YUV420P, 
-		      RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL ) 
-		   );
-		   
-    m_pMbxFrames->Write( _pAVImage );
+    CAVImage* _pHighLightsImage = new CAVImage();
+    _pHighLightsImage->init( 
+	    pAVFrame, 
+	    pAVCodecCtx,
+	    RecdConfig::GetInstance().GetHighLightsRectWidth( m_sIpCamera, NULL ), 
+	    RecdConfig::GetInstance().GetHighLightsRectHeight( m_sIpCamera, NULL ), 
+	    RecdConfig::GetInstance().GetHighLightsBackgroundStatus( m_sIpCamera, NULL )?PIX_FMT_RGB24:PIX_FMT_YUV420P,
+	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL )
+	);
+    m_pMbxHighLightsFrames->Write( new CAVFrame( _pHighLightsImage ) );
+       
+    
     VERBOSE_INFO( 
 		  FLogMessage::VL_HIGH_PERIODIC_MESSAGE, 
-		  FString( 0, "Mailbox [%s] Size=[%u]", (const char*)m_pMbxFrames->GetName(), m_pMbxFrames->GetSize() ),
+		  FString( 0, "Mailboxes RAW Size=[%u] HL Size=[%u]", m_pMbxRawFrames->GetSize(), m_pMbxHighLightsFrames->GetSize() ),
 		  OnVideoFrame() 
 		)
   }
+  
+  return true;
+}
+
+bool    RecdStreamReader::OnAudioFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst )
+{
+  CAVSample* pRawSample = new CAVSample();
+  CAVSample* pHLSample  = new CAVSample();
+  
+  pRawSample->init(pAVFrame, pAVCodecCtx);
+  pHLSample->init (pAVFrame, pAVCodecCtx);
+  
+  m_pMbxRawFrames->Write       ( new CAVFrame( pRawSample ) );
+  m_pMbxHighLightsFrames->Write( new CAVFrame( pHLSample  ) );
   
   return true;
 }
