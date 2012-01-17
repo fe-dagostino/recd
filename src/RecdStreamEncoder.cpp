@@ -20,6 +20,8 @@
 
 #include "RecdStreamEncoder.h"
 #include "RecdReaderCollector.h"
+#include "RecdEncoderCollector.h"
+#include "RecdRenderEncoder.h"
 #include "RecdConfig.h"
 #include "LOGGING/FLogger.h"
 
@@ -38,7 +40,7 @@ RecdStreamEncoder::RecdStreamEncoder(
   (GET_LOG_MAILBOX())->SetLogMessageFlags( GetLogMessageFlags()     );
   (GET_LOG_MAILBOX())->SetVerbosityFlags ( GetVerbosityLevelFlags() );
   
-  m_pMbxFrames = new FTMailbox<CAVImage* >( "Mailbox Scaled Frames", NULL );
+  m_pMbxFrames = new FTMailbox<CAVFrame* >( "Mailbox Scaled Frames", NULL );
   if ( m_pMbxFrames == NULL )
   {
     ERROR_INFO( "Not Enough Memory for allocating Mailbox", RecdStreamReader() )
@@ -55,7 +57,7 @@ RecdStreamEncoder::~RecdStreamEncoder()
     // Delete all allocated items
     while ( !m_pMbxFrames->IsEmpty() )
     {
-      CAVImage* pFrame = m_pMbxFrames->Read();
+      CAVFrame* pFrame = m_pMbxFrames->Read();
       delete pFrame;
     }
     
@@ -65,7 +67,7 @@ RecdStreamEncoder::~RecdStreamEncoder()
   }
 }
 
-CAVImage*  RecdStreamEncoder::GetRenderFrame( DWORD dwTimeout, BOOL bRemove )
+CAVFrame*  RecdStreamEncoder::GetRenderFrame( DWORD dwTimeout, BOOL bRemove )
 {
   if ( m_pMbxFrames == NULL )
     return NULL;
@@ -84,28 +86,36 @@ CAVPoint   RecdStreamEncoder::GetRenderPoint() const
 CAVRect    RecdStreamEncoder::GetRenderRect() const
 {
   return CAVRect(
-  		  RecdConfig::GetInstance().GetRenderRectX( m_rStreamReader.GetCameraName(), NULL ), 
-		  RecdConfig::GetInstance().GetRenderRectY( m_rStreamReader.GetCameraName(), NULL ), 
+  		  0, 
+		  0, 
 		  RecdConfig::GetInstance().GetRenderRectWidth( m_rStreamReader.GetCameraName(), NULL ), 
 		  RecdConfig::GetInstance().GetRenderRectHeight( m_rStreamReader.GetCameraName(), NULL )
                 );
 }
 
-VOID   RecdStreamEncoder::ReleaseRenderFrame( CAVImage*& pImage )
+CAVColor   RecdStreamEncoder::GetRenderColor() const
 {
-  if ( pImage == NULL )
+  return RecdConfig::GetInstance().GetRenderKeyColor( m_rStreamReader.GetCameraName(), NULL );
+}
+
+VOID   RecdStreamEncoder::ReleaseRenderFrame( CAVFrame*& pFrame )
+{
+  if ( pFrame == NULL )
     return ;
   
-  delete pImage;
-  pImage = NULL;
+  delete pFrame;
+  pFrame = NULL;
 }
 
 
-VOID   RecdStreamEncoder::StartRecording( const FString& sDestination )
+VOID   RecdStreamEncoder::StartRecording( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw )
 {
   FMutexCtrl _mtxCtrl( m_mtxRecording );
   
   m_sDestination = sDestination;
+  m_bRender      = bRender; 
+  m_bHighlights  = bHighlights; 
+  m_bRaw         = bRaw;
   m_bRecording   = TRUE;
 }
 
@@ -142,15 +152,21 @@ BOOL	RecdStreamEncoder::Final()
 
 VOID	RecdStreamEncoder::Run()
 {
-  double      _dFPS     = 0.03333;
-  
+  double _dFPS          = 0.03333;
+  INT    _iRenderWidth  = -1;
+  INT    _iRenderHeight = -1;
+  DWORD  _dwRenderOpts  =  1;
+
   while ( !m_bExit )
   {
     FThread::YieldThread();
     
     m_mtxRecording.EnterMutex();
     
-    if ( m_bRecording == FALSE )
+    if ( 
+	  ( m_bRecording                        == FALSE ) && 
+	  ( m_rStreamReader.GetRawMailboxSize() ==     0 )
+       )
     {
       //Release mutex
       m_mtxRecording.LeaveMutex();
@@ -182,7 +198,7 @@ VOID	RecdStreamEncoder::Run()
     }
     else  
     {
-      CAVImage* _pFrame = m_rStreamReader.GetFrame(
+      CAVFrame* _pFrame = m_rStreamReader.GetRawFrame(
 			  RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL ),
 			  TRUE
 			);
@@ -195,8 +211,20 @@ VOID	RecdStreamEncoder::Run()
 	continue;
       }
       
-      if ( m_pAVEncoder == NULL )
+      if ( ( m_pAVEncoder == NULL ) && ( m_bRaw == TRUE ) )
       {
+	// If the encoder is closed and we got a sample frame we will skip it
+	// untile the first video frame will be readed.
+	if ( _pFrame->getImage() == NULL )
+	{	  
+	  // Release memory.
+	  m_rStreamReader.ReleaseFrame( _pFrame );
+
+	  //Release mutex
+	  m_mtxRecording.LeaveMutex();
+	  continue;
+	}
+	
 	FString _sCameraName  = m_rStreamReader.GetCameraName();
 	
 	FString _sOutFilename( 0, "%s/%s_%010d.mp4", (const char*)m_sDestination, (const char*)_sCameraName, time(NULL) ); 
@@ -216,15 +244,15 @@ VOID	RecdStreamEncoder::Run()
 	int _iWidth  = RecdConfig::GetInstance().GetEncoderWidth ( _sCameraName, NULL );
 	int _iHeight = RecdConfig::GetInstance().GetEncoderHeight( _sCameraName, NULL );
 	if (_iWidth  == -1 )
-	  _iWidth = _pFrame->getWidth();
+	  _iWidth = _pFrame->getImage()->getWidth();
 	
 	if (_iHeight == -1 )
-	  _iHeight = _pFrame->getHeight();
+	  _iHeight = _pFrame->getImage()->getHeight();
 	
 	LOG_INFO( FString( 0, "CAM=[%s] OUT=[%s]", (const char*)_sCameraName, (const char*)_sOutFilename ), Run() )
 	AVResult _avRes = m_pAVEncoder->open( 
 					    _sOutFilename,
-					    0,
+					    AV_ENCODE_VIDEO_STREAM,
 					    _iWidth,
 					    _iHeight,
 					    RecdConfig::GetInstance().GetEncoderFps       ( _sCameraName, NULL ),
@@ -246,40 +274,57 @@ VOID	RecdStreamEncoder::Run()
 	  continue;
 	}
 	
-	_dFPS =  1.0 / (double)RecdConfig::GetInstance().GetEncoderFps( _sCameraName, NULL );
+	_dFPS          = 1.0 / (double)RecdConfig::GetInstance().GetEncoderFps( _sCameraName, NULL );
+	_iRenderWidth  = RecdConfig::GetInstance().GetRenderRectWidth( m_rStreamReader.GetCameraName(), NULL );
+	_iRenderHeight = RecdConfig::GetInstance().GetRenderRectHeight( m_rStreamReader.GetCameraName(), NULL );
+	_dwRenderOpts  = RecdConfig::GetInstance().GetEncoderRescaleOptions( m_rStreamReader.GetCameraName(), NULL );
+
       } //if ( _pAVEncoder == NULL )
       
       m_swFPS.Reset();
       
-      /**
-       * Each frame retrieved from reader will be resized for the final render.
-       * The reason why this part of code resides here instead of Render thread 
-       * is to better balance cpu(s) allocation time at kenel level and so to 
-       * distribute complexity.
-       */
-      if ( m_pMbxFrames->GetSize() >= RecdConfig::GetInstance().GetEncoderMaxItems( m_rStreamReader.GetCameraName(), NULL ) )
+      if ( m_bRender == TRUE )
       {
-	ERROR_INFO( FString( 0, "Consumer Thread (RENDER) is TOO SLOW queue is full SIZE[%d].", m_pMbxFrames->GetSize() ), Run() )
-      }
-      else
+	/**
+	* Each frame retrieved from reader will be resized for the final render.
+	* The reason why this part of code resides here instead of Render thread 
+	* is to better balance cpu(s) allocation time at kenel level and so to 
+	* distribute complexity.
+	*/
+	if ( m_pMbxFrames->GetSize() >= RecdConfig::GetInstance().GetEncoderMaxItems( m_rStreamReader.GetCameraName(), NULL ) )
+	{
+	  ERROR_INFO( FString( 0, "Consumer Thread (RENDER) is TOO SLOW queue is full SIZE[%d].", m_pMbxFrames->GetSize() ), Run() )
+	}
+	else
+	{
+	  // Just Video Frame will be dispatched to RecdRenderEncoder
+	  if ( _pFrame->getImage() != NULL )
+	  {
+	    CAVImage* pAVImage = new CAVImage();
+			    pAVImage->init( *_pFrame->getImage(), 
+			    _iRenderWidth, 
+			    _iRenderHeight, 
+			    PIX_FMT_RGB24,
+			    _dwRenderOpts
+			    );
+	    
+	    //Write a new frame into mailbox for rendering
+	    m_pMbxFrames->Write( new CAVFrame( pAVImage ) );
+	  }
+	}
+      }//if ( m_bRender == TRUE )
+      
+      if ( m_pAVEncoder != NULL )
       {
-	  CAVImage* pAVImage = new CAVImage();
-	  pAVImage->init( *_pFrame, 
-			  RecdConfig::GetInstance().GetRenderRectWidth( m_rStreamReader.GetCameraName(), NULL ), 
-			  RecdConfig::GetInstance().GetRenderRectHeight( m_rStreamReader.GetCameraName(), NULL ), 
-			  PIX_FMT_RGB24,
-			  RecdConfig::GetInstance().GetEncoderRescaleOptions( m_rStreamReader.GetCameraName(), NULL ) 
-			);
-	  m_pMbxFrames->Write( pAVImage );
-      }
-     
-      if ( m_pAVEncoder->write( _pFrame->getFrame(), AVMEDIA_TYPE_VIDEO ) != eAVSucceded )
-      {
-	  ERROR_INFO( "Failed to encode frame.", Run() )
-	  
-	  delete m_pAVEncoder;
-	  m_pAVEncoder = NULL;
-      }
+	if ( m_pAVEncoder->write( _pFrame, AV_INTERLEAVED_AUDIO_WR /*@todo move in conf*/ ) != eAVSucceded )
+	{
+	    ERROR_INFO( "Failed to encode frame.", Run() )
+	    
+	    delete m_pAVEncoder;
+	    m_pAVEncoder = NULL;
+	}
+      }//if ( m_bRaw == TRUE )
+
       
       // Release memory.
       m_rStreamReader.ReleaseFrame( _pFrame );
