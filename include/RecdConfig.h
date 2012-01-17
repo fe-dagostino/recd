@@ -24,8 +24,11 @@
 #include "FSingleton.h"
 #include "FConfigFileEx.h"
 #include "RecdConfigException.h"
+#include "avcolor.h"
 
 USING_NAMESPACE_FED
+
+using namespace libavcpp;
 
 /**
  * This is a singleton object used to facilitates access 
@@ -96,7 +99,6 @@ public:
    * @param sIPCamera must match with a section in configuration file.
    */
   INT 		GetReaderRescaleOptions( const FString& sIPCamera, BOOL* pbStored ) const;
-
   
   /**
    * Return max number of items that can be buffered from encoder thread.
@@ -167,6 +169,91 @@ public:
   INT		GetEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored ) const;
 
   /**
+   * Return timespan to be used for the HighLights on the specified camera.
+   * Default value is 40.0 seconds ( check GetReaderBufferingTime() )
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  DOUBLE	GetHighLightsTimeSpan( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return encoded video width to be used for HighLights.
+   * Default value is -1 ( keep input size )
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetHighLightsEncoderWidth( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return encoded video height to be used for HighLights.
+   * Default value is -1 ( keep input size )
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT		GetHighLightsEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return encoded video fps to be used for HighLights.
+   * Default value is 30fps
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT		GetHighLightsEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const;
+
+  /**
+   * Return encoded video gop (group of pictures) to be used for HighLights.
+   * Default value is 10.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT		GetHighLightsEncoderGoP( const FString& sIPCamera, BOOL* pbStored ) const;
+
+  /**
+   * Return encoded video bit rate to be used for HighLights.
+   * Default value is 8000000.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT		GetHighLightsEncoderBitRate( const FString& sIPCamera, BOOL* pbStored ) const;
+
+  /**
+   * Return encoded video codec to be used for HighLights.
+   * Default value is 13 ( CODEC_ID_MPEG4 ).
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT		GetHighLightsEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored ) const;
+  
+  /**
+   * Return TRUE if a background image should be used for rendering highlights; FALSE in order to 
+   * write highlights like raw video.
+   * Default value is FALSE
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  BOOL          GetHighLightsBackgroundStatus( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return background image to be used for rendering highlights.
+   * Default value is /etc/recd/default-skin-highlight.png
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  FString  	GetHighLightsBackground( const FString& sIPCamera, BOOL* pbStored ) const;
+
+  /**
+   * Return rect destination X position on final highlights render.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetHighLightsRectX( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return rect destination Y position on final highlights render.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetHighLightsRectY( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return rect destination Widht on final highlights render.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetHighLightsRectWidth( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return rect destination Height on final highlights render.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetHighLightsRectHeight( const FString& sIPCamera, BOOL* pbStored ) const;
+  
+  /**
    * Return rect destination X position on final render.
    * Default value is 0.
    * @param sIPCamera must match with a section in configuration file.
@@ -191,6 +278,13 @@ public:
    */
   INT 		GetRenderRectHeight( const FString& sIPCamera, BOOL* pbStored ) const;
   
+  /**
+   * Return key color for the specified camera.
+   * Default value is CAVColor().
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  CAVColor 	GetRenderKeyColor( const FString& sIPCamera, BOOL* pbStored ) const;
+  
   /////////////////////////////
   // RENDER SECTION 
   ///////////////////////
@@ -211,6 +305,10 @@ public:
    * Return background filename to be used during renering.
    */
   FString  		GetRenderBackground( BOOL* pbStored ) const;
+  /**
+   * Return filename with key colors.
+   */
+  FString  		GetRenderBackgroundMask( BOOL* pbStored ) const;
   
   /**
    * Return encoded video width.

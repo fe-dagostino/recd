@@ -232,7 +232,7 @@ INT RecdConfig::GetEncoderWidth( const FString& sIPCamera, BOOL* pbStored ) cons
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "VIDEO SETTINGS", 0, pbStored );
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 0, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -247,7 +247,7 @@ INT RecdConfig::GetEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) con
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "VIDEO SETTINGS", 1, pbStored );
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 1, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -262,7 +262,7 @@ INT	RecdConfig::GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "VIDEO SETTINGS", 2, pbStored );
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 2, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -277,7 +277,7 @@ INT	RecdConfig::GetEncoderGoP( const FString& sIPCamera, BOOL* pbStored ) const
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "VIDEO SETTINGS", 3, pbStored );
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 3, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -292,7 +292,7 @@ INT	RecdConfig::GetEncoderBitRate( const FString& sIPCamera, BOOL* pbStored ) co
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "VIDEO SETTINGS", 4, pbStored );
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 4, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -307,7 +307,7 @@ INT	RecdConfig::GetEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored )
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "VIDEO SETTINGS", 5, pbStored );
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 5, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -316,6 +316,199 @@ INT	RecdConfig::GetEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored )
 
   //Return default value
   return 13;
+}
+
+DOUBLE RecdConfig::GetHighLightsTimeSpan( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (DOUBLE)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS SETTING", 0, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsTimeSpan() );
+  }
+
+  //Return default value
+  return 40.0;
+}
+
+INT RecdConfig::GetHighLightsEncoderWidth( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 0, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsEncoderWidth() );
+  }
+
+  //Return default value
+  return -1;
+}
+
+INT RecdConfig::GetHighLightsEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 1, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsEncoderHeight() );
+  }
+
+  //Return default value
+  return -1;
+}
+
+INT	RecdConfig::GetHighLightsEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 2, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsEncoderFps() );
+  }
+
+  //Return default value
+  return 30;
+}
+
+INT	RecdConfig::GetHighLightsEncoderGoP( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 3, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsEncoderGoP() );
+  }
+
+  //Return default value
+  return 10;
+}
+
+INT	RecdConfig::GetHighLightsEncoderBitRate( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 4, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsEncoderBitRate() );
+  }
+
+  //Return default value
+  return 8000000;
+}
+
+INT	RecdConfig::GetHighLightsEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 5, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsEncoderVideoCodec() );
+  }
+
+  //Return default value
+  return 13;
+}
+
+BOOL  RecdConfig::GetHighLightsBackgroundStatus( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return ((INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS BACKGROUND", 0, pbStored )==1);
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsBackground() );
+  }
+  
+  return FALSE;
+}
+
+FString  RecdConfig::GetHighLightsBackground( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return m_cfg.GetValue( sIPCamera, "HIGHLIGHTS BACKGROUND", 1, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsBackground() );
+  }
+  
+  return "/etc/recd/default-skin-highlight.png";
+}
+
+INT 	RecdConfig::GetHighLightsRectX( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS RECT", 0, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsRectX() );
+  }
+
+  //Return default value
+  return 0;
+}
+
+INT 	RecdConfig::GetHighLightsRectY( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS RECT", 1, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsRectY() );
+  }
+
+  //Return default value
+  return 0;
+}
+
+INT 	RecdConfig::GetHighLightsRectWidth( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS RECT", 2, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsRectWidth() );
+  }
+
+  //Return default value
+  return 0;
+}
+
+INT 	RecdConfig::GetHighLightsRectHeight( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS RECT", 3, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsRectHeight() );
+  }
+
+  //Return default value
+  return 0;
 }
 
 INT 	RecdConfig::GetRenderRectX( const FString& sIPCamera, BOOL* pbStored ) const
@@ -378,6 +571,27 @@ INT 	RecdConfig::GetRenderRectHeight( const FString& sIPCamera, BOOL* pbStored )
   return 0;
 }
 
+CAVColor RecdConfig::GetRenderKeyColor( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return CAVColor( 
+		      (INT)m_cfg.GetValue( sIPCamera, "KEY COLOR", 0, pbStored ),
+		      (INT)m_cfg.GetValue( sIPCamera, "KEY COLOR", 1, pbStored ),
+		      (INT)m_cfg.GetValue( sIPCamera, "KEY COLOR", 2, pbStored ),
+		      255
+		   );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetRenderKeyColor() );
+  }
+
+  //Return default value
+  return CAVColor();
+}
+
+
 /////////////////////////////
 // RENDER SECTION 
 ///////////////////////
@@ -423,7 +637,21 @@ FString  RecdConfig::GetRenderBackground( BOOL* pbStored ) const
     TRACE_EXCEPTION_CATCH( fexception, GetRenderBackground() );
   }
   
-  return "/etc/recd/default.png";
+  return "/etc/recd/default-skin-alpha.png";
+}
+
+FString RecdConfig::GetRenderBackgroundMask( BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return m_cfg.GetValue( "RENDER", "BACKGROUND", 1, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetRenderBackground() );
+  }
+  
+  return "/etc/recd/default-skin-chroma-keys.png";
 }
 
 INT 	RecdConfig::GetRenderWidth( BOOL* pbStored ) const
@@ -515,16 +743,6 @@ INT	RecdConfig::GetRenderVideoCodec( BOOL* pbStored ) const
   //Return default value
   return 13;
 }
-
-
-
-
-
-
-
-
-
-
 
 
 /////////////////
