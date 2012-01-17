@@ -25,7 +25,8 @@
 #include "FStopWatch.h"
 #include "LOGGING/FLogThread.h"
 #include "avdecoder.h"
-#include "avimage.h"
+#include "avframe.h"
+
 
 USING_NAMESPACE_FED
 USING_NAMESPACE_LOGGING
@@ -59,20 +60,31 @@ public:
   /**
    * Read/Dequeue first frame.
    * @param bRemove  specify if the item must be removed ot not.
-   * Return a pointer to an instance of CAVImage, it bRemove was TRUE
+   * Return a pointer to an instance of CAVFrame, it bRemove was TRUE
    * returned value must be release with a call to ReleaseFrame.
+   * NOTE: this method will be called from RecdReaderEncoder instance.
    */
-   CAVImage* 	 GetFrame( DWORD dwTimeout, BOOL bRemove );
+  CAVFrame* 	 GetRawFrame( DWORD dwTimeout, BOOL bRemove );
+  /**
+   * Read/Dequeue first frame.
+   * As for GetRawFrame but destinated to be used from RecdHighLightsEncoder instances.
+   */   
+  CAVFrame* 	 GetHighLightsFrame( DWORD dwTimeout, BOOL bRemove );
+  /***/ 
+  DWORD 	 GetRawMailboxSize() const;
+  /***/
+  DWORD 	 GetHighLightsMailboxSize() const;
+  
+  /**
+   * Release specified pointer.
+   * To be used for pointers returned both from GetRawFrame and GetHighLightsFrame
+   */
+  VOID 	 ReleaseFrame( CAVFrame*& pAVFrame );
    
-   /**
-    * Release specified pointer.
-    */
-   VOID 	 ReleaseFrame( CAVImage*& pImage );
-   
-   /**
-    * Start/Stop Reading.
-    */
-   VOID 	 SetReading( BOOL bEnable );
+  /**
+   * Start/Stop Reading.
+   */
+  VOID 	 SetReading( BOOL bEnable );
    
 // Implements IAVDecoderEvents interface  
 protected:
@@ -88,6 +100,12 @@ protected:
    */
   virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst );
 
+  /**
+    *  Event will be raised for each frame coming from the stream.
+    *  Return value true in order to continue decoding, false to interrupt.
+    */
+  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst );  
+  
 // Implements virtual method defined in FThread  
 protected:
   
@@ -116,7 +134,8 @@ private:
   BOOL                    m_bGotKeyFrame;
   DOUBLE		  m_dStopWatchCMP; // Used in order to compare stop watch elapsed time.
   FStopWatch		  m_swStopReading;
-  FTMailbox<CAVImage* >*  m_pMbxFrames;
+  FTMailbox<CAVFrame* >*  m_pMbxRawFrames;
+  FTMailbox<CAVFrame* >*  m_pMbxHighLightsFrames;
 };
 
 #endif // RECDSTREAMREADER_H
