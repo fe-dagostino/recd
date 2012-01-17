@@ -84,31 +84,25 @@ public:
     if ( _sRender == "1" )
       _dRenderBitRate = RecdConfig::GetInstance().GetRenderBitRate( NULL );
     
-    if ( _sRaw    == "1" )
+    
+    FParameter*  _pIpCameras = RecdConfig::GetInstance().GetIpCameras( NULL );
+    if ( _pIpCameras == NULL )
     {
-      FParameter*  _pIpCameras = RecdConfig::GetInstance().GetIpCameras( NULL );
-      if ( _pIpCameras == NULL )
-      {
-	ERROR_INFO( "Parameter not FOUND", Execute() )
-      }
-      else
-      {
-	LOG_INFO( FString( 0, "Configured [%d] Cameras", _pIpCameras->GetCount() ), OnInitialize() )
-	for ( DWORD _dwItem = 0; _dwItem < _pIpCameras->GetCount(); _dwItem++ )
-	{
-	  FString _sCamera = _pIpCameras->GetValue( _dwItem );
-
-	  _dRawBitRate += (double)RecdConfig::GetInstance().GetEncoderBitRate( _sCamera, NULL );
-	}
-      }
-    } //if ( _sRaw    == "1" )
-
-
-    if ( _sHighlights == "1" )
-    {
-      _dHighlightsBitRate = _dRawBitRate;
+      ERROR_INFO( "Parameter not FOUND", Execute() )
     }
+    else
+    {
+      for ( DWORD _dwItem = 0; _dwItem < _pIpCameras->GetCount(); _dwItem++ )
+      {
+	FString _sCamera = _pIpCameras->GetValue( _dwItem );
 
+	if ( _sRaw    == "1" )
+	  _dRawBitRate += (double)RecdConfig::GetInstance().GetEncoderBitRate( _sCamera, NULL );
+	
+	if ( _sHighlights == "1" )
+	  _dHighlightsBitRate = (double)RecdConfig::GetInstance().GetHighLightsEncoderBitRate( _sCamera, NULL );
+      }
+    }
 
     _dBitRates   = _dRenderBitRate + _dHighlightsBitRate + _dRawBitRate;
     ////////////////////////////////////////////
