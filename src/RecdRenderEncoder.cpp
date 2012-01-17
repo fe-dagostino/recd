@@ -24,8 +24,94 @@
 #include "avencoder.h"
 #include "LOGGING/FLogger.h"
 
-GENERATE_CLASSINFO( RecdRenderEncoder, FLogThread ) 
 
+
+
+class RenderThreads : public FThread
+{
+public:
+  RenderThreads( RecdRenderEncoder* pRenderEncoder, RecdStreamEncoder* pStreamEncoder )
+    : FThread( NULL, FThread::TP_CRITICAL, -1 ),
+      m_bExit( FALSE ),
+      m_bGotFrame( FALSE ),
+      m_pRenderEncoder( pRenderEncoder ),
+      m_pStreamEncoder( pStreamEncoder )
+  {
+  }
+  
+  virtual ~RenderThreads()
+  {
+  }
+
+  BOOL    GotFrame() const
+  {  
+    return m_bGotFrame;  
+  }
+  
+  VOID    Reset()
+  {
+    m_bGotFrame = FALSE;
+  }
+  
+protected:
+  BOOL	Initial()
+  { 
+    return TRUE; 
+  }
+
+  BOOL	Final()
+  {
+    m_bExit = TRUE;
+
+    return TRUE;
+  }
+
+  VOID	Run()
+  {
+    while ( !m_bExit )
+    {
+      CAVFrame*   _pFrame = m_pStreamEncoder->GetRenderFrame( 
+                                                              RecdConfig::GetInstance().GetRenderReadingTimeout( NULL ),
+                                                              TRUE
+                                                            );
+      if ( _pFrame != NULL )
+      {
+	m_bGotFrame = TRUE;
+	
+	if ( _pFrame->getImage() != NULL )
+	{
+	  m_pRenderEncoder->Blend( 
+				    m_pStreamEncoder->GetRenderPoint(),
+				    *_pFrame->getImage(),
+				    m_pStreamEncoder->GetRenderColor()
+				);
+	}			       
+			       
+	m_pStreamEncoder->ReleaseRenderFrame( _pFrame );
+      }
+      else
+      {
+	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
+	
+	FThread::YieldThread();	
+      }
+    }//while ( !m_bExit )
+  }
+
+private:
+  BOOL               m_bExit;
+  BOOL               m_bGotFrame;
+  RecdRenderEncoder* m_pRenderEncoder;
+  RecdStreamEncoder* m_pStreamEncoder;
+};
+
+  
+////////////////////////////////////////////////////////////////
+
+  
+GENERATE_CLASSINFO( RecdRenderEncoder, FLogThread ) 
+  
+  
 RecdRenderEncoder::RecdRenderEncoder( const FString& sRenderEncoderName )
   : FLogThread( sRenderEncoderName, NULL, FThread::TP_CRITICAL, -1 ),
     m_bExit( FALSE ),
@@ -34,16 +120,49 @@ RecdRenderEncoder::RecdRenderEncoder( const FString& sRenderEncoderName )
 {
   (GET_LOG_MAILBOX())->SetLogMessageFlags( GetLogMessageFlags()     );
   (GET_LOG_MAILBOX())->SetVerbosityFlags ( GetVerbosityLevelFlags() );
+  
+  INT iRenderThread = 0;
+  m_pRenderThreads  = new RenderThreads*[RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize()];
+  FTList<RecdStreamEncoder* >::Iterator _iter = RecdEncoderCollector::GetInstance().GetRawEncoders()->Begin();
+  
+  while ( _iter )
+  {
+    RecdStreamEncoder* _pStreamEncoder = *_iter;
+
+    m_pRenderThreads[iRenderThread] = new RenderThreads( this, _pStreamEncoder );
+    m_pRenderThreads[iRenderThread]->Start();
+
+    iRenderThread++;
+    // move to next item in the list.
+    _iter++;
+  }
 }
 
 RecdRenderEncoder::~RecdRenderEncoder()
 {
-
+  if ( m_pRenderThreads != NULL )
+  {
+      for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+      {
+	m_pRenderThreads[iRenderThread]->Stop();
+	delete m_pRenderThreads[iRenderThread];
+	m_pRenderThreads[iRenderThread] = NULL;
+      }
+      
+      delete [] m_pRenderThreads;
+      m_pRenderThreads = NULL;
+  }
+  
 }
 
 VOID   RecdRenderEncoder::StartRecording( const FString& sDestination )
 {
   FMutexCtrl _mtxCtrl( m_mtxRecording );
+
+  for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+  {
+    m_pRenderThreads[iRenderThread]->Reset();
+  }
   
   m_sDestination = sDestination;
   m_bRecording   = TRUE;
@@ -127,6 +246,46 @@ VOID	RecdRenderEncoder::Run()
       {
 	FString _sOutFilename( 0, "%s/RENDER_%010d.mp4", (const char*)m_sDestination, time(NULL) ); 
 	
+	//Loading background image.
+	FString sBkgFilename     = RecdConfig::GetInstance().GetRenderBackground( NULL );
+	FString sBkgMaskFilename = RecdConfig::GetInstance().GetRenderBackgroundMask( NULL );
+	
+	int _iWidth  = RecdConfig::GetInstance().GetRenderWidth ( NULL );
+	int _iHeight = RecdConfig::GetInstance().GetRenderHeight( NULL );
+	if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
+	{
+	  ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgFilename ), Run() )
+	  
+	  //Release mutex
+	  m_mtxRecording.LeaveMutex();
+	  continue;
+	}
+	
+	if (_iWidth  == -1 )
+	  _iWidth  = m_rgbaBkg.getWidth();
+	
+	if (_iHeight == -1 )
+	  _iHeight = m_rgbaBkg.getHeight();
+	
+	// If we have no skin rendering will be impossible
+	if ( ( _iWidth == -1 ) && (_iHeight == -1 ) )
+	{
+	  ERROR_INFO( FString( 0, "Failed to LOAD Background [%s] CHECK YOUR CONFIGURATION", (const char*)sBkgMaskFilename ), Run() )
+
+	  //Release mutex
+	  m_mtxRecording.LeaveMutex();
+	  continue;
+	}
+	
+	// Initialize background mask with background image.
+	if ( m_rgbaMaskBkg.load( (const char*)sBkgMaskFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
+	{
+	  ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgMaskFilename ), Run() )
+	  
+	  LOG_INFO( "Initialize BACKGROUND MASK using BACKGROUND IMAGE -- Check CONFIGURATION ...", Run() )
+	  m_rgbaMaskBkg.init( m_rgbaBkg, _iWidth, _iHeight, PIX_FMT_RGBA );
+	}
+
 	m_pAVEncoder = new CAVEncoder();
 	if ( m_pAVEncoder == NULL )
 	{
@@ -136,27 +295,11 @@ VOID	RecdRenderEncoder::Run()
 	  m_mtxRecording.LeaveMutex();
 	  continue;
 	}
-	
-	//Loading background image.
-	FString sBkgFilename = RecdConfig::GetInstance().GetRenderBackground( NULL );
-	
-	if ( m_rgbaBkg.load( (const char*)sBkgFilename, -1, -1, PIX_FMT_RGBA ) != eAVSucceded )
-	{
-	  ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgFilename ), Run() )
-	}
-	
-	int _iWidth  = RecdConfig::GetInstance().GetRenderWidth ( NULL );
-	int _iHeight = RecdConfig::GetInstance().GetRenderHeight( NULL );
-	if (_iWidth  == -1 )
-	  _iWidth  = m_rgbaBkg.getWidth();
-	
-	if (_iHeight == -1 )
-	  _iHeight = m_rgbaBkg.getHeight();
-	
+
 	LOG_INFO( FString( 0, "RENDERING OUT=[%s]", (const char*)_sOutFilename ), Run() )
 	AVResult _avRes = m_pAVEncoder->open( 
 					    _sOutFilename,
-					    0,
+					    AV_ENCODE_VIDEO_STREAM,
 					    _iWidth,
 					    _iHeight,
 					    RecdConfig::GetInstance().GetRenderFps       ( NULL ),
@@ -177,49 +320,30 @@ VOID	RecdRenderEncoder::Run()
 	}
 	
         _dFPS =  1.0 / (double)RecdConfig::GetInstance().GetRenderFps( NULL );
+	
+	// Wait until all reading channels will got a frame to be processed.
+	for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+	{
+	  while ( !m_pRenderThreads[iRenderThread]->GotFrame() )
+	    FThread::Sleep(1);
+	}
       } //if ( _pAVEncoder == NULL )
       
 
       m_swFPS.Reset();
 
-      FTList<RecdStreamEncoder* >::Iterator _iter = RecdEncoderCollector::GetInstance().GetEncoders()->Begin();
-      while ( _iter )
-      {
-	RecdStreamEncoder* _pRecdStreamEncoder = *_iter;
-	
-	CAVImage*          _pFrame = _pRecdStreamEncoder->GetRenderFrame( 
-					RecdConfig::GetInstance().GetRenderReadingTimeout( NULL ),
-					TRUE
-				     );
-			     
-	if ( _pFrame != NULL )
-	{
-	  if ( m_rgbaBkg.blend( _pRecdStreamEncoder->GetRenderPoint(), *_pFrame ) != eAVSucceded )
-	  {
-	    ERROR_INFO( "Blending failed", Run() )
-	  }
-	  
-	  // Release memory.
-	  _pRecdStreamEncoder->ReleaseRenderFrame( _pFrame );
-	}
-	else
-	{
-	  VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
-	}
-	
-	// move to next item in the list.
-	_iter++;
-      }
       // initialize autput frame.
       _avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
 
-      if ( m_pAVEncoder->write( _avFrameYUV.getFrame(), AVMEDIA_TYPE_VIDEO ) != eAVSucceded )
+      CAVFrame  _avFrame( &_avFrameYUV ); 
+      if ( m_pAVEncoder->write( &_avFrame, 0 ) != eAVSucceded )
       {
 	  ERROR_INFO( "Failed to encode frame.", Run() )
 	  
 	  delete m_pAVEncoder;
 	  m_pAVEncoder = NULL;
       }
+      _avFrame.detach();
 
       //Release mutex
       m_mtxRecording.LeaveMutex();
@@ -228,6 +352,17 @@ VOID	RecdRenderEncoder::Run()
 	FThread::YieldThread();
     }// else if ( m_bRecording == FALSE )
   }// while ( !m_bExit )
+}
+
+BOOL    RecdRenderEncoder::Blend( const CAVPoint& rPos, const CAVImage& rFrame, const CAVColor& crKeyColor )
+{
+  // Use alpha blending + key color in order to map rFrame on m_rgbaBkg.
+  if ( m_rgbaBkg.blend( rPos, rFrame, m_rgbaMaskBkg, crKeyColor ) != eAVSucceded )
+  {
+    ERROR_INFO( "Blending failed", Run() )
+  }
+
+  return TRUE;
 }
 
 DWORD   RecdRenderEncoder::GetLogMessageFlags() const
