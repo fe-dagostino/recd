@@ -47,13 +47,13 @@ public:
   {  
     //      01234567890123456789012345678901234567890123456789012345678901234567890123456789
     //      01234567890123456789012345
-    return "stop recording( <status>,   Return the list of all available commands.\n"
-           "            <destination>)";     
+    return "stop recording()          Terminate all streaming files.";
   }
 
   FString            Help() const
   { 
-    return " Usage:\r\n"
+    return "\r\n"
+           " Usage:\r\n"
            "    stop recording( TRUE|FALSE );\r\n";
   }
 
@@ -64,8 +64,6 @@ public:
 
     // Terminate reading from each cam
     RecdReaderCollector::GetInstance().SetReading   ( FALSE );
-    // Signaling to termnate all encoders.
-    RecdEncoderCollector::GetInstance().StopRecording();
     
     return _retVal;
   }

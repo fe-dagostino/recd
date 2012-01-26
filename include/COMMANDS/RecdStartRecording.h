@@ -72,7 +72,7 @@ public:
     FString _sRaw        = rArgs[4].Trim();
 
     
-    BOOL     _bExist   = TRUE;
+    BOOL    _bExist      = TRUE;
     
     FTRY
     {
@@ -92,10 +92,11 @@ public:
     // starts and return value will be rciOk.
     if ( _bExist == TRUE )
     {
+	// Start rendering both single video and mixed video.
+	RecdEncoderCollector::GetInstance().SetParameters( _sDstPath1, (_sRender=="1"), (_sHighlights=="1"), (_sRaw=="1") );
+
 	// Start reading each cam
 	RecdReaderCollector::GetInstance().SetReading   ( TRUE );
-	// Start rendering both single video and mixed video.
-	RecdEncoderCollector::GetInstance().StartRecording( _sDstPath1, (_sRender=="1"), (_sHighlights=="1"), (_sRaw=="1") );
     }
     else
     {
