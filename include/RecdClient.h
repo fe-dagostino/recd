@@ -22,6 +22,7 @@
 #define RECDCLIENT_H
 
 #include "FString.h"
+#include "FMutex.h"
 #include "RCI/FRciClient.h"
 
 USING_NAMESPACE_FED
@@ -33,14 +34,24 @@ class RecdClient : public FObject
 public:  
   /**
    */
-  RecdClient( const FString& sIP, WORD wPort );
+  RecdClient( const FString& sIP, WORD wPort, LONG iReadTimeout );
   /**
    */
   virtual ~RecdClient();
+
+  /**
+   * Return Total size and amount of available size on the specified mount point.
+   * Available size refers to the amount of space available for the user.
+   * @param sMountPoint [input] mount point to be checked.
+   * @param dTotal      [output] total size
+   * @param dFree       [output] available size
+   * Function return TRUE in case of success, FALSE otherwise.
+   */
+  bool          GetDiskSize( const FString& sMountPoint, double& dTotal, double& dFree );
   
   /**
    * Estimate available recording time based on services and amount of available space.
-   * Return time in seconds.
+   * Return time in seconds, -1.0 means error. 
    */
   double 	EstimateTime( double dSize, bool bRender, bool bHighlights, bool bRaw );
   
@@ -56,13 +67,36 @@ public:
    */
   bool          StopRecording();
 
+  /**
+   * Retrieve percentage of buffers both at beginning and at the end of recording.
+   * @param bFlushBuffers [input] true if desidered percentage refers to flush buffers and so
+   *                              to the end of recording.
+   * @param dPergentace   [output] will be populated with the percntage from 0 to 100 %
+   * Function return TRUE if buffering operations has been completed, FALSE otherwise; this
+   * mean that application level should wait until percentage reach 100% and return value is TRUE,
+   * or also until return value is TRUE. Basically pecentage could be used to provide some
+   * feedback to the user.
+   */
+  bool          GetBuffers( bool bFlushBuffers, double& dPercentage );
+
+  /**
+   *  Start HighLights on specified camera. 
+   *  @param sCamera   must match with configuration value.
+   *                   Could be also "NULL" and HighLights will
+   *                   be starts on all cameras.
+   *  Return true in case of success, false otherwise.
+   */
+  bool          StartHighLights( const FString& _sCamera );
+  
 private:
   bool 	Connect();
   bool 	Disconnect();
   
 private:  
   FString      m_sRemoteAddr;
-  WORD 	       m_wRemotePort;
+  WORD         m_wRemotePort;
+  LONG         m_iReadTimeout;
+  FMutex       m_mtxClient;
   FRciClient*  m_pRciClient;
 };
 

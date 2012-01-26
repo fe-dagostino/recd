@@ -21,12 +21,13 @@
 #include "../include/RecdClient.h"
 #include "../include/RecdParser.h"
 
+#include "FMutexCtrl.h"
 #include "FTcpConnection.h"
 
 GENERATE_CLASSINFO( RecdClient, FObject )
 
-RecdClient::RecdClient( const FString& sIP, WORD wPort )
-  : m_pRciClient( NULL ), m_sRemoteAddr( sIP ), m_wRemotePort( wPort )
+RecdClient::RecdClient( const FString& sIP, WORD wPort, LONG iReadTimeout )
+  : m_pRciClient( NULL ), m_sRemoteAddr( sIP ), m_wRemotePort( wPort ),m_iReadTimeout( iReadTimeout )
 {
 }
 
@@ -36,9 +37,73 @@ RecdClient::~RecdClient()
   Disconnect();
 }
 
+bool    RecdClient::GetDiskSize( const FString& sMountPoint, double& dTotal, double& dFree )
+{
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  bool       _bRetVal = false;
+  
+  if ( Connect() == false )
+  {
+    return _bRetVal;
+  }
+  
+  FArguments _argsRes;
+  FArguments _argsParams;
+  
+  _argsParams.Add( new FString( sMountPoint ) );
+  
+  if ( m_pRciClient->Execute( _argsRes, "GET DISK SIZE", _argsParams, m_iReadTimeout ) == rciError )
+  {
+    Disconnect();
+    
+    return _bRetVal;
+  }
+
+  if ( _argsRes[0] == "OK" )
+  {
+    dTotal   = (double)_argsRes[1];
+    dFree    = (double)_argsRes[2];
+    _bRetVal = true;
+  }
+   
+  return _bRetVal;
+}
+
+bool    RecdClient::GetBuffers( bool bFlushBuffers, double& dPercentage )
+{
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  bool       _bRetVal = false;
+  
+  if ( Connect() == false )
+  {
+    return _bRetVal;
+  }
+  
+  FArguments _argsRes;
+  FArguments _argsParams;
+  
+  _argsParams.Add( new FString( (int)bFlushBuffers ) );
+  
+  if ( m_pRciClient->Execute( _argsRes, "GET BUFFERS", _argsParams, m_iReadTimeout ) == rciError )
+  {
+    Disconnect();
+    
+    return _bRetVal;
+  }
+
+  if ( _argsRes[0] == "OK" )
+  {
+    dPercentage = (double)_argsRes[1];
+    _bRetVal    = (_argsRes[2]=="1");
+  }
+   
+  return _bRetVal;
+}
+
 double 	RecdClient::EstimateTime( double dSize, bool bRender, bool bHighlights, bool bRaw )
 {
-  double _dRetVal = -1.0;
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  double     _dRetVal = -1.0;
   
   if ( Connect() == false )
   {
@@ -53,7 +118,7 @@ double 	RecdClient::EstimateTime( double dSize, bool bRender, bool bHighlights, 
   _argsParams.Add( new FString( 0, "%d", bHighlights ) );
   _argsParams.Add( new FString( 0, "%d", bRaw        ) );
   
-  if ( m_pRciClient->Execute( _argsRes, "ESTIMATE TIME", _argsParams, 60000 ) == rciError )
+  if ( m_pRciClient->Execute( _argsRes, "ESTIMATE TIME", _argsParams, m_iReadTimeout ) == rciError )
   {
     Disconnect();
     
@@ -70,7 +135,8 @@ double 	RecdClient::EstimateTime( double dSize, bool bRender, bool bHighlights, 
 
 bool    RecdClient::StartRecording( const FArguments& args, bool bRender, bool bHighlights, bool bRaw )
 {
-  bool _bRetVal = false;
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  bool       _bRetVal = false;
   
   if ( Connect() == false )
   {
@@ -86,7 +152,7 @@ bool    RecdClient::StartRecording( const FArguments& args, bool bRender, bool b
   _argsParams.Add( new FString( 0, "%d", bHighlights ) );
   _argsParams.Add( new FString( 0, "%d", bRaw        ) );
 
-  if ( m_pRciClient->Execute( _argsRes, "START RECORDING", _argsParams, 60000 ) == rciError )
+  if ( m_pRciClient->Execute( _argsRes, "START RECORDING", _argsParams, m_iReadTimeout ) == rciError )
   {
     Disconnect();
     
@@ -101,7 +167,8 @@ bool    RecdClient::StartRecording( const FArguments& args, bool bRender, bool b
 
 bool    RecdClient::StopRecording()
 {
-  bool _bRetVal = false;
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  bool       _bRetVal = false;
   
   if ( Connect() == false )
   {
@@ -111,7 +178,7 @@ bool    RecdClient::StopRecording()
   FArguments _argsRes;
   FArguments _argsParams;
   
-  if ( m_pRciClient->Execute( _argsRes, "STOP RECORDING", _argsParams, 60000 ) == rciError )
+  if ( m_pRciClient->Execute( _argsRes, "STOP RECORDING", _argsParams, m_iReadTimeout ) == rciError )
   {
     Disconnect();
     
@@ -124,9 +191,38 @@ bool    RecdClient::StopRecording()
   return _bRetVal;
 }
 
+bool          RecdClient::StartHighLights( const FString& _sCamera )
+{
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  bool       _bRetVal = false;
+  
+  if ( Connect() == false )
+  {
+    return _bRetVal;
+  }
 
+  FArguments _argsRes;
+  FArguments _argsParams;
+  
+  _argsParams.Add( new FString( _sCamera ) );
+
+  if ( m_pRciClient->Execute( _argsRes, "START HIGHLIGHTS", _argsParams, m_iReadTimeout ) == rciError )
+  {
+    Disconnect();
+    
+    return _bRetVal;
+  }
+
+  if ( _argsRes[0] == "OK" )
+    _bRetVal = true;
+
+  return _bRetVal;
+}
+  
 bool 	RecdClient::Connect()
 {
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  
   if ( m_pRciClient != NULL )
     return true;
   
@@ -142,6 +238,8 @@ bool 	RecdClient::Connect()
 
 bool 	RecdClient::Disconnect()
 {
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  
   if ( m_pRciClient == NULL )
     return false;
   
