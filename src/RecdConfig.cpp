@@ -77,36 +77,6 @@ DOUBLE 	RecdConfig::GetReaderBufferingTime( BOOL* pbStored ) const
   return 40.0;
 }
 
-DOUBLE 	RecdConfig::GetReaderStartDelayTime( BOOL* pbStored ) const
-{
-  FTRY
-  {
-    return (DOUBLE)m_cfg.GetValue( "IP CAMERAS", "START STOP DELAY", 0, pbStored );
-  }
-  FCATCH( FConfigFileException, fexception  )
-  {
-    TRACE_EXCEPTION_CATCH( fexception, GetReaderStartDelayTime() );
-  }
-  
-  //Return default value
-  return 0.0;
-}
-
-DOUBLE 	RecdConfig::GetReaderStopDelayTime( BOOL* pbStored ) const
-{
-  FTRY
-  {
-    return (DOUBLE)m_cfg.GetValue( "IP CAMERAS", "START STOP DELAY", 1, pbStored );
-  }
-  FCATCH( FConfigFileException, fexception  )
-  {
-    TRACE_EXCEPTION_CATCH( fexception, GetReaderStopDelayTime() );
-  }
-  
-  //Return default value
-  return 40.0;
-}
-
 FString	RecdConfig::GetReaderStream( const FString& sIPCamera, BOOL* pbStored ) const
 {
   FTRY
@@ -166,6 +136,23 @@ INT   RecdConfig::GetReaderRescaleOptions( const FString& sIPCamera, BOOL* pbSto
   //Return default value
   return 1;
 }
+
+
+DOUBLE   RecdConfig::GetReaderFpsLimits( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (DOUBLE)m_cfg.GetValue( sIPCamera, "READER SETTINGS", 3, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetReaderFpsLimits() );
+  }
+
+  //Return default value
+  return 25;
+}
+
 
 DWORD RecdConfig::GetEncoderMaxItems( const FString& sIPCamera, BOOL* pbStored ) const
 {
@@ -240,7 +227,7 @@ INT RecdConfig::GetEncoderWidth( const FString& sIPCamera, BOOL* pbStored ) cons
   }
 
   //Return default value
-  return -1;
+  return 1280;
 }
 
 INT RecdConfig::GetEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) const
@@ -255,14 +242,14 @@ INT RecdConfig::GetEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) con
   }
 
   //Return default value
-  return -1;
+  return 720;
 }
 
-INT	RecdConfig::GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
+DOUBLE	RecdConfig::GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 2, pbStored );
+    return (DOUBLE)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 2, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -270,7 +257,7 @@ INT	RecdConfig::GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
   }
 
   //Return default value
-  return 30;
+  return 25;
 }
 
 INT	RecdConfig::GetEncoderGoP( const FString& sIPCamera, BOOL* pbStored ) const
@@ -363,11 +350,11 @@ INT RecdConfig::GetHighLightsEncoderHeight( const FString& sIPCamera, BOOL* pbSt
   return -1;
 }
 
-INT	RecdConfig::GetHighLightsEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
+DOUBLE	RecdConfig::GetHighLightsEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
 {
   FTRY
   {
-    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 2, pbStored );
+    return (DOUBLE)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 2, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -375,7 +362,7 @@ INT	RecdConfig::GetHighLightsEncoderFps( const FString& sIPCamera, BOOL* pbStore
   }
 
   //Return default value
-  return 30;
+  return 25;
 }
 
 INT	RecdConfig::GetHighLightsEncoderGoP( const FString& sIPCamera, BOOL* pbStored ) const
@@ -684,11 +671,11 @@ INT	RecdConfig::GetRenderHeight( BOOL* pbStored ) const
   return -1;
 }
 
-INT	RecdConfig::GetRenderFps( BOOL* pbStored ) const
+DOUBLE	RecdConfig::GetRenderFps( BOOL* pbStored ) const
 {
   FTRY
   {
-    return (DWORD)m_cfg.GetValue( "RENDER", "VIDEO SETTINGS", 2, pbStored );
+    return (DOUBLE)m_cfg.GetValue( "RENDER", "VIDEO SETTINGS", 2, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -696,7 +683,7 @@ INT	RecdConfig::GetRenderFps( BOOL* pbStored ) const
   }
 
   //Return default value
-  return 30;
+  return 25;
 }
 
 INT	RecdConfig::GetRenderGoP(BOOL* pbStored ) const

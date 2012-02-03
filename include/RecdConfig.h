@@ -60,16 +60,6 @@ public:
    * Default value 40.0 seconds.
    */
   DOUBLE 	GetReaderBufferingTime( BOOL* pbStored ) const;
-  /**
-   * Return delay time for start reading.
-   * Default value 0.0 seconds.
-   */
-  DOUBLE 	GetReaderStartDelayTime( BOOL* pbStored ) const;
-  /**
-   * Return delay time for stop reading.
-   * Default value 40.0 seconds.
-   */
-  DOUBLE 	GetReaderStopDelayTime( BOOL* pbStored ) const;
 
   /**
    * Return stream url for the specified ip camera.
@@ -101,6 +91,13 @@ public:
   INT 		GetReaderRescaleOptions( const FString& sIPCamera, BOOL* pbStored ) const;
   
   /**
+   * Return limit for incoming fps.
+   * Default value is 25fps.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  DOUBLE 	GetReaderFpsLimits( const FString& sIPCamera, BOOL* pbStored ) const;
+  
+  /**
    * Return max number of items that can be buffered from encoder thread.
    * Default value is 5 that means 5/30 seconds of buffered, where 30 is the 
    * maximum number of frames per second expexted from video stream.
@@ -130,22 +127,22 @@ public:
   
   /**
    * Return encoded video width.
-   * Default value is -1 ( keep input size )
+   * Default value is 1280
    * @param sIPCamera must match with a section in configuration file.
    */
   INT 		GetEncoderWidth( const FString& sIPCamera, BOOL* pbStored ) const;
   /**
    * Return encoded video height.
-   * Default value is -1 ( keep input size )
+   * Default value is 720 
    * @param sIPCamera must match with a section in configuration file.
    */
   INT		GetEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) const;
   /**
    * Return encoded video fps.
-   * Default value is 30fps
+   * Default value is 25fps
    * @param sIPCamera must match with a section in configuration file.
    */
-  INT		GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const;
+  DOUBLE	GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const;
 
   /**
    * Return encoded video gop (group of pictures).
@@ -188,10 +185,10 @@ public:
   INT		GetHighLightsEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) const;
   /**
    * Return encoded video fps to be used for HighLights.
-   * Default value is 30fps
+   * Default value is 25fps
    * @param sIPCamera must match with a section in configuration file.
    */
-  INT		GetHighLightsEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const;
+  DOUBLE	GetHighLightsEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const;
 
   /**
    * Return encoded video gop (group of pictures) to be used for HighLights.
@@ -322,9 +319,9 @@ public:
   INT			GetRenderHeight( BOOL* pbStored ) const;
   /**
    * Return encoded video fps.
-   * Default value is 30fps
+   * Default value is 25fps
    */
-  INT			GetRenderFps( BOOL* pbStored ) const;
+  DOUBLE		GetRenderFps( BOOL* pbStored ) const;
 
   /**
    * Return encoded video gop (group of pictures).
