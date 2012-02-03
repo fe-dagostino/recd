@@ -16,22 +16,24 @@ CONF=recd.cfg
 mkdir cfg
 mkdir bin
 mkdir lib
+mkdir pkg
+mkdir doc
 
-cp ../../config/$CONF                               ./cfg/
-cp ../../config/skin-aspect-ratio.png               ./cfg/
-cp ../../config/skin-aspect-ratio-chroma-keys.png   ./cfg/
+cp -v ../../config/$CONF                          ./cfg/
+cp -v ../../config/default-skin-highlights.png    ./cfg/
+cp -v ../../config/default-skin-alpha.png         ./cfg/
+cp -v ../../config/default-skin-chroma-keys.png   ./cfg/
 
 
-cp ../../build/$PRGR                      ./bin/
-cp ../../build/$PRGR-debug                ./bin/
-cp /usr/local/lib/libfedlibrary-3.0.0.so  ./lib/
-cp /usr/local/lib/liblibavcpp-1.0.0.so    ./lib/
-cp /usr/local/lib/libavcodec.so           ./lib/
-cp /usr/local/lib/libavdevice.so          ./lib/
-cp /usr/local/lib/libavfilter.so          ./lib/
-cp /usr/local/lib/libavformat.so          ./lib/
-cp /usr/local/lib/libavutil.so            ./lib/
-cp /usr/local/lib/libswscale.so           ./lib/
+cp -v ../../build/$PRGR                      ./bin/
+cp -v ../../build/$PRGR-debug                ./bin/
+cp -v /usr/local/lib/libfedlibrary-3.0.0.so  ./lib/
+cp -v /usr/local/lib/liblibavcpp-1.0.0.so    ./lib/
 
-ldconfig
+tar zcvf ./lib/libav.tgz /usr/local/lib/libav* /usr/local/lib/libsw* 
+
+cp -v ../../Dependencies/*.deb               ./pkg/
+
+tar zcvf doc/html.tar.gz ../../docs/doxy/html
+find . -type f |xargs md5sum > md5.txt
 
