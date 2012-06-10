@@ -153,6 +153,63 @@ DOUBLE   RecdConfig::GetReaderFpsLimits( const FString& sIPCamera, BOOL* pbStore
   return 25;
 }
 
+BOOL  	RecdConfig::GetReaderFiltersStatus( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return ((INT)m_cfg.GetValue( sIPCamera, "READER FILTERS", 0, pbStored )==1);
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetReaderFiltersStatus() );
+  }
+  
+  return FALSE;
+}
+
+FString RecdConfig::GetReaderFiltersSettings( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return m_cfg.GetValue( sIPCamera, "READER FILTERS", 1, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetReaderFiltersSettings() );
+  }
+  
+  return "FILTERS SETTINGS";
+}
+
+FString RecdConfig::GetReaderFiltersConfiguration( const FString& sFilerSection, BOOL* pbStored ) const
+{
+  FString _sRetVal;
+  FTRY
+  {
+    FParametersSection* pParamSect = m_cfg.GetSection( sFilerSection, pbStored );
+    
+    FParametersSection::Iterator _iter( pParamSect );
+    
+    while ( FParameter* pParameter = _iter.GetParameter() )
+    {
+      if ( !_sRetVal.IsEmpty() )
+	_sRetVal += ",";
+      
+      _sRetVal += pParameter->GetValue( 0 ); // Append filter name
+      _sRetVal += "=";
+      _sRetVal += pParameter->GetValue( 1 ); // Append filter cofiguration
+    }
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetReaderFiltersConfiguration() );
+  }
+  
+  return _sRetVal;
+}
+
+
+
 
 DWORD RecdConfig::GetEncoderMaxItems( const FString& sIPCamera, BOOL* pbStored ) const
 {
@@ -245,11 +302,11 @@ INT RecdConfig::GetEncoderHeight( const FString& sIPCamera, BOOL* pbStored ) con
   return 720;
 }
 
-DOUBLE	RecdConfig::GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
+INT	RecdConfig::GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const
 {
   FTRY
   {
-    return (DOUBLE)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 2, pbStored );
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 2, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -303,6 +360,109 @@ INT	RecdConfig::GetEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored )
 
   //Return default value
   return 13;
+}
+
+INT	RecdConfig::GetEncoderVideoCodecProfile( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER VIDEO SETTINGS", 6, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetEncoderVideoCodecProfile() );
+  }
+
+  //Return default value
+  return 0;
+}
+
+BOOL RecdConfig::GetEncoderBackgroundStatus( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return ((INT)m_cfg.GetValue( sIPCamera, "ENCODER BACKGROUND", 0, pbStored )==1);
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetEncoderBackgroundStatus() );
+  }
+  
+  return FALSE;
+}
+
+FString RecdConfig::GetEncoderBackground( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return m_cfg.GetValue( sIPCamera, "ENCODER BACKGROUND", 1, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetEncoderBackground() );
+  }
+  
+  return "/etc/recd/default-skin-raw.png";
+}
+
+INT RecdConfig::GetEncoderRectX( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER RECT", 0, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetEncoderRectX() );
+  }
+
+  //Return default value
+  return 0;
+}
+
+INT RecdConfig::GetEncoderRectY( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER RECT", 1, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetEncoderRectY() );
+  }
+
+  //Return default value
+  return 0;
+}
+
+INT RecdConfig::GetEncoderRectWidth( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER RECT", 2, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetEncoderRectWidth() );
+  }
+
+  //Return default value
+  return 0;
+}
+
+INT RecdConfig::GetEncoderRectHeight( const FString& sIPCamera, BOOL* pbStored ) const  
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "ENCODER RECT", 3, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetEncoderRectHeight() );
+  }
+
+  //Return default value
+  return 0;
 }
 
 DOUBLE RecdConfig::GetHighLightsTimeSpan( const FString& sIPCamera, BOOL* pbStored ) const
@@ -408,6 +568,21 @@ INT	RecdConfig::GetHighLightsEncoderVideoCodec( const FString& sIPCamera, BOOL* 
 
   //Return default value
   return 13;
+}
+
+INT   RecdConfig::GetHighLightsEncoderVideoCodecProfile( const FString& sIPCamera, BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( sIPCamera, "HIGHLIGHTS VIDEO SETTINGS", 6, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetHighLightsEncoderVideoCodecProfile() );
+  }
+
+  //Return default value
+  return 0;
 }
 
 BOOL  RecdConfig::GetHighLightsBackgroundStatus( const FString& sIPCamera, BOOL* pbStored ) const
@@ -720,7 +895,7 @@ INT	RecdConfig::GetRenderVideoCodec( BOOL* pbStored ) const
 {
   FTRY
   {
-    return (DWORD)m_cfg.GetValue( "RENDER", "VIDEO SETTINGS", 5, pbStored );
+    return (INT)m_cfg.GetValue( "RENDER", "VIDEO SETTINGS", 5, pbStored );
   }
   FCATCH( FConfigFileException, fexception  )
   {
@@ -731,7 +906,21 @@ INT	RecdConfig::GetRenderVideoCodec( BOOL* pbStored ) const
   return 13;
 }
 
+INT	RecdConfig::GetRenderVideoCodecProfile( BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (INT)m_cfg.GetValue( "RENDER", "VIDEO SETTINGS", 6, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetRenderVideoProfile() );
+  }
 
+  //Return default value
+  return 0;
+}
+  
 /////////////////
 ////	GENERAL
 //////

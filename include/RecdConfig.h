@@ -97,6 +97,26 @@ public:
    */
   DOUBLE 	GetReaderFpsLimits( const FString& sIPCamera, BOOL* pbStored ) const;
   
+  
+  /**
+   * Return TRUE if filtering on specified CAM has been enabled, FALSE otherwise.
+   * Default value is FALSE.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  BOOL  	GetReaderFiltersStatus( const FString& sIPCamera, BOOL* pbStored ) const;
+  
+  /**
+   * Retrieve filter section name.
+   * Default value is "FILTERS SETTINGS".
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  FString  	GetReaderFiltersSettings( const FString& sIPCamera, BOOL* pbStored ) const;
+
+  
+  FString	GetReaderFiltersConfiguration( const FString& sFilterSection, BOOL* pbStored ) const;
+
+  
+  
   /**
    * Return max number of items that can be buffered from encoder thread.
    * Default value is 5 that means 5/30 seconds of buffered, where 30 is the 
@@ -142,7 +162,7 @@ public:
    * Default value is 25fps
    * @param sIPCamera must match with a section in configuration file.
    */
-  DOUBLE	GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const;
+  INT		GetEncoderFps( const FString& sIPCamera, BOOL* pbStored ) const;
 
   /**
    * Return encoded video gop (group of pictures).
@@ -165,6 +185,51 @@ public:
    */
   INT		GetEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored ) const;
 
+  /**
+   * Return encoded video codec profile.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT		GetEncoderVideoCodecProfile( const FString& sIPCamera, BOOL* pbStored ) const;
+  
+  /**
+   * Return TRUE if a background image should be used for alpha blend on raw video; FALSE in order to 
+   * write highlights directly.
+   * Default value is FALSE
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  BOOL          GetEncoderBackgroundStatus( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return background image to be used for alpha blending on raw videos.
+   * Default value is /etc/recd/default-skin-raw.png
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  FString  	GetEncoderBackground( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return rect destination X position on raw video.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetEncoderRectX( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return rect destination Y position on raw video.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetEncoderRectY( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return rect destination Widht on raw video.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetEncoderRectWidth( const FString& sIPCamera, BOOL* pbStored ) const;
+  /**
+   * Return rect destination Height on raw video.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT 		GetEncoderRectHeight( const FString& sIPCamera, BOOL* pbStored ) const;  
+  
   /**
    * Return timespan to be used for the HighLights on the specified camera.
    * Default value is 40.0 seconds ( check GetReaderBufferingTime() )
@@ -210,6 +275,13 @@ public:
    * @param sIPCamera must match with a section in configuration file.
    */
   INT		GetHighLightsEncoderVideoCodec( const FString& sIPCamera, BOOL* pbStored ) const;
+  
+  /**
+   * Return encoded video codec profile.
+   * Default value is 0.
+   * @param sIPCamera must match with a section in configuration file.
+   */
+  INT		GetHighLightsEncoderVideoCodecProfile( const FString& sIPCamera, BOOL* pbStored ) const;
   
   /**
    * Return TRUE if a background image should be used for rendering highlights; FALSE in order to 
@@ -340,6 +412,12 @@ public:
    * Default value is 13 ( CODEC_ID_MPEG4 ).
    */
   INT			GetRenderVideoCodec( BOOL* pbStored ) const;
+  
+  /**
+   * Return encoded video codec profile.
+   * Default value is 0.
+   */
+  INT			GetRenderVideoCodecProfile( BOOL* pbStored ) const;
   
   /////////////////////////////
   // GENERAL SECTION 
