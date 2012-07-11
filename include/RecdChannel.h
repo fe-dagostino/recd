@@ -36,8 +36,6 @@ class RecdChannel : public FChannel, public IChannelReaderEvents
   ENABLE_FRTTI( RecdChannel ) 
 public:
   /***/
-  RecdChannel( );
-  /***/
   RecdChannel( 
 		IConnection*    pConnection, 
 		IThreadFactory* pThreadFactory = NULL,
