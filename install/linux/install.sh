@@ -27,7 +27,17 @@ else
 fi
 
 # Pakages installation
-dpkg -i ./pkg/*.deb
+#dpkg -i ./pkg/*.deb
+dpkg -i ./pkg/libmp3lame0_3.98.4-0.0_amd64.deb
+dpkg -i ./pkg/multiarch-support_2.13-33_amd64.deb
+dpkg -i ./pkg/libvo-aacenc0_0.1.2-1_amd64.deb
+
+# New dependencies coming with libavcpp-1.1.0 and recd version 1.1.0.0
+apt-get install libvpx0
+apt-get install libdirac-decoder0
+apt-get install libdirac-encoder0
+apt-get install librtmp0
+apt-get install frei0r-plugins
 
 #
 # Deamon installation

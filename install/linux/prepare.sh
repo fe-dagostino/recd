@@ -25,10 +25,12 @@ cp -v ../../config/default-skin-alpha.png         ./cfg/
 cp -v ../../config/default-skin-chroma-keys.png   ./cfg/
 
 
-cp -v ../../build/$PRGR                      ./bin/
-cp -v ../../build/$PRGR-debug                ./bin/
-cp -v /usr/local/lib/libfedlibrary-3.0.0.so  ./lib/
-cp -v /usr/local/lib/liblibavcpp-1.0.0.so    ./lib/
+cp -v ../../build/$PRGR                            ./bin/
+cp -v ../../build/$PRGR-debug                      ./bin/
+cp -v /usr/local/lib/libfedlibrary-3.0.0.so        ./lib/
+cp -v /usr/local/lib/liblibavcpp-1.1.0.so          ./lib/
+cp -v /usr/local/lib/libfedlibrary-3.0.0-debug.so  ./lib/
+cp -v /usr/local/lib/liblibavcpp-1.1.0-debug.so    ./lib/
 
 tar zcvf ./lib/libav.tgz /usr/local/lib/libav* /usr/local/lib/libsw* 
 
