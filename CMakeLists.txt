@@ -21,7 +21,7 @@ IF( CMAKE_BUILD_TYPE STREQUAL "Debug" )
         -1.0.0-debug
      )
   set(  LIBAVCPP_VER
-	-1.0.0-debug
+	-1.1.0-debug
     )
   set(  FEDLIB_VER
         -3.0.0-debug
@@ -33,7 +33,7 @@ ELSE()
         -1.0.0
      )
   set(  LIBAVCPP_VER
-	-1.0.0
+	-1.1.0
     )
   set(  FEDLIB_VER
         -3.0.0
@@ -56,11 +56,15 @@ set(  RECD_INCLUDE
         ./include/RecdRenderEncoder.h
         ./include/RecdStreamEncoder.h
         ./include/RecdEncoderCollector.h
+        ./include/RecdHighLightsEncoder.h
         ./include/COMMANDS/RecdList.h
         ./include/COMMANDS/RecdHelp.h
         ./include/COMMANDS/RecdGetVersion.h
+        ./include/COMMANDS/RecdGetBuffers.h
+        ./include/COMMANDS/RecdGetDiskSize.h
         ./include/COMMANDS/RecdStartRecording.h
         ./include/COMMANDS/RecdStopRecording.h
+        ./include/COMMANDS/RecdStartHighLights.h
         ./include/COMMANDS/RecdEstimateTime.h
 )
 
@@ -83,6 +87,7 @@ set(  RECD_SRC
         ./src/RecdReaderCollector.cpp
         ./src/RecdStreamEncoder.cpp
         ./src/RecdEncoderCollector.cpp
+        ./src/RecdHighLightsEncoder.cpp
 )
 
 set(  RECD_CLI_SRC
