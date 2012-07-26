@@ -27,6 +27,18 @@
 USING_NAMESPACE_FED
 USING_NAMESPACE_LOGGING
 
+
+class RenderThreads;
+
+  enum RenderThreadStatus
+  {
+    eRTUndefined,    // Initial status no action required.
+    eRTWaiting,      // Reader stay in waiting mode so input streaming is closed
+    eRTOpenStream,   // 
+    eRTRendering,
+    eRTReleasing
+  };
+
 /**
  * This is the consumer for RecdStreamEncoder(s).
  * One single instance of will read datas from all RecdStreamEncoder is otder to 
@@ -40,6 +52,19 @@ class RecdRenderEncoder : public FLogThread
 {
   ENABLE_FRTTI( RecdRenderEncoder )
 public:
+  
+  /**
+   * High Lights Encoder Status status enumeration.
+   */
+  enum RenderEncoderStatus
+  {
+    eREUndefined,    // Initial status no action required.
+    eREWaiting,      // Reader stay in waiting mode so input streaming is closed
+    eREOpenStream,   // 
+    eREEncoding,
+    eREReleasing
+  };  
+  
   /**
    * 
    */
@@ -52,12 +77,16 @@ public:
   /**
    *  Activate recording on stream reader. 
    */
-  VOID			StartRecording( const FString& sDestination );
-  /**
-   *  Deactivate recording on stream reader. 
-   */
-  VOID			StopRecording();
-    
+  VOID                     SetParameters( const FString& sDestination );
+  /***/
+  BOOL                     Blend( const CAVPoint& rPos, const CAVImage& rFrame, const CAVColor& crKeyColor );
+  
+  /***/
+  enum RenderEncoderStatus GetStatus() const;
+  
+private:  
+  /***/
+  bool                     SetStatus( RenderEncoderStatus eStatus );
   
 // Implements virtual method defined in FThread  
 protected:
@@ -72,20 +101,31 @@ protected:
   virtual VOID		Run();
 
 private:
+  /**
+   * Return TRUE if all Rendering Threads are in the specified status.
+   */
+  BOOL          CheckStatus( enum RenderThreadStatus  eStatus );
+
+  /**
+   * Put specified command in each rendering thread.
+   */
+  VOID          PostCommand( RecdMbxItem::MbxCommandType eCommand );
+private:
   /**/
   DWORD   	GetLogMessageFlags() const;
   /**/
   DWORD   	GetVerbosityLevelFlags() const;
   
 private:
-  BOOL            m_bExit;
-  FMutex          m_mtxRecording;
-  BOOL            m_bRecording;
-  CAVEncoder*     m_pAVEncoder;
-  FSemaphore      m_semStop;  
-  FString         m_sDestination;
-  CAVImage        m_rgbaBkg;
-  FStopWatch      m_swFPS;
+  BOOL                 m_bExit;
+  mutable FMutex       m_mtxEncoder;
+  RenderEncoderStatus  m_eEncoderStatus;
+  CAVEncoder*          m_pAVEncoder;
+  FString              m_sDestination;
+  CAVImage             m_rgbaBkg;
+  CAVImage             m_rgbaMaskBkg;
+  FStopWatch           m_swFPS;
+  RenderThreads**      m_pRenderThreads;
 };
 
 #endif // RECDSTREAMENCODER_H

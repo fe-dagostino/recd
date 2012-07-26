@@ -33,46 +33,69 @@ RecdStreamEncoder::RecdStreamEncoder(
 				    )
   : FLogThread( sStreamEncoderName, NULL, FThread::TP_CRITICAL, -1 ),
     m_bExit( FALSE ),
-    m_bRecording( FALSE ),
+    m_eEncoderStatus( eSEUndefined ),
     m_pAVEncoder( NULL ),
     m_rStreamReader( rStreamReader )
 {
   (GET_LOG_MAILBOX())->SetLogMessageFlags( GetLogMessageFlags()     );
   (GET_LOG_MAILBOX())->SetVerbosityFlags ( GetVerbosityLevelFlags() );
   
-  m_pMbxFrames = new FTMailbox<CAVFrame* >( "Mailbox Scaled Frames", NULL );
-  if ( m_pMbxFrames == NULL )
+  m_pMbxItems = new FTMailbox<RecdMbxItem* >( "Mailbox Scaled Frames", NULL );
+  if ( m_pMbxItems == NULL )
   {
     ERROR_INFO( "Not Enough Memory for allocating Mailbox", RecdStreamReader() )
     //@todo
   }
 
+  m_pVideoItems = new FTQueue<RecdMbxItem* >();
+  if ( m_pVideoItems == NULL )
+  {
+    ERROR_INFO( "Not Enough Memory for allocating Queue", RecdStreamReader() )
+    //@todo
+  }
 }
 
 RecdStreamEncoder::~RecdStreamEncoder()
 {
-  if ( m_pMbxFrames != NULL )
+  if ( m_pMbxItems != NULL )
   {
     LOG_INFO( "Release mailbox resources", ~RecdStreamReader() )
     // Delete all allocated items
-    while ( !m_pMbxFrames->IsEmpty() )
+    while ( !m_pMbxItems->IsEmpty() )
     {
-      CAVFrame* pFrame = m_pMbxFrames->Read();
-      delete pFrame;
+      RecdMbxItem* pMbxItem = m_pMbxItems->Read();
+      delete pMbxItem;
     }
     
     // Release mailbox.
-    delete m_pMbxFrames;
-    m_pMbxFrames = NULL;
+    delete m_pMbxItems;
+    m_pMbxItems = NULL;
+  }
+  
+  if ( m_pVideoItems != NULL )
+  {
+    // Release mailbox.
+    delete m_pVideoItems;
+    m_pVideoItems = NULL;
   }
 }
 
-CAVFrame*  RecdStreamEncoder::GetRenderFrame( DWORD dwTimeout, BOOL bRemove )
+RecdMbxItem*  RecdStreamEncoder::PopRenderMbxItem( DWORD dwTimeout, BOOL bRemove )
 {
-  if ( m_pMbxFrames == NULL )
+  if ( m_pMbxItems == NULL )
     return NULL;
   
-  return m_pMbxFrames->Read( dwTimeout, bRemove );
+  return m_pMbxItems->Read( dwTimeout, bRemove );
+}
+
+BOOL       RecdStreamEncoder::PushRenderMbxItem( RecdMbxItem* pMbxItem )
+{
+  if ( m_pMbxItems == NULL )
+    return FALSE;
+  
+  m_pMbxItems->Write( pMbxItem );
+  
+  return TRUE;
 }
 
 CAVPoint   RecdStreamEncoder::GetRenderPoint() const
@@ -98,45 +121,41 @@ CAVColor   RecdStreamEncoder::GetRenderColor() const
   return RecdConfig::GetInstance().GetRenderKeyColor( m_rStreamReader.GetCameraName(), NULL );
 }
 
-VOID   RecdStreamEncoder::ReleaseRenderFrame( CAVFrame*& pFrame )
+VOID   RecdStreamEncoder::ReleaseMbxItem( RecdMbxItem*& pMbxItem )
 {
-  if ( pFrame == NULL )
+  if ( pMbxItem == NULL )
     return ;
   
-  delete pFrame;
-  pFrame = NULL;
+  delete pMbxItem;
+  pMbxItem = NULL;
 }
 
 
-VOID   RecdStreamEncoder::StartRecording( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw )
+VOID   RecdStreamEncoder::SetParameters( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw )
 {
-  FMutexCtrl _mtxCtrl( m_mtxRecording );
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
   
   m_sDestination = sDestination;
   m_bRender      = bRender; 
   m_bHighlights  = bHighlights; 
   m_bRaw         = bRaw;
-  m_bRecording   = TRUE;
 }
 
-VOID   RecdStreamEncoder::StopRecording()
+enum RecdStreamEncoder::StreamEncoderStatus RecdStreamEncoder::GetStatus() const
 {
-  BOOL _bWaitClose = FALSE;
-  
-  m_mtxRecording.EnterMutex();
-    if ( m_pAVEncoder != NULL  )
-    {
-      _bWaitClose = TRUE;
-    }
-    m_bRecording   = FALSE;
-  m_mtxRecording.LeaveMutex();
-  
-  if ( _bWaitClose )
-  {
-    m_semStop.Wait();
-  }
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
+
+  return m_eEncoderStatus;
 }
 
+bool RecdStreamEncoder::SetStatus( StreamEncoderStatus eStatus )
+{
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
+  
+  m_eEncoderStatus = eStatus;
+  
+  return true;
+}
 
 BOOL	RecdStreamEncoder::Initial()
 { 
@@ -150,82 +169,75 @@ BOOL	RecdStreamEncoder::Final()
   return TRUE;
 }
 
+
 VOID	RecdStreamEncoder::Run()
 {
-  double _dFPS          = 0.03333;
-  INT    _iRenderWidth  = -1;
-  INT    _iRenderHeight = -1;
-  DWORD  _dwRenderOpts  =  1;
-
+  double     _dFPS              = 0.03333;
+  double     _dFpsError         = 0.0;
+  DWORD      _dwEncoderMaxItems = RecdConfig::GetInstance().GetEncoderMaxItems( m_rStreamReader.GetCameraName(), NULL );
+  DWORD      _dwReadingTimeout  = RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
+  DWORD      _dwStandbyTimeout  = RecdConfig::GetInstance().GetEncoderStandByDelay( m_rStreamReader.GetCameraName(), NULL ); 
+  INT        _iRenderWidth  = -1;
+  INT        _iRenderHeight = -1;
+  DWORD      _dwEncoderOpts =  1;
+  CAVPoint   _avAlphaBlendingPos;
+  CAVRect    _avAlphaBlendingRect;
+  CAVImage   _avFrameRGBA;
+  CAVImage   _avFrameYUV;
+   
+  // Update status to waiting mode.
+  SetStatus( eSEWaiting );
+  
   while ( !m_bExit )
   {
     FThread::YieldThread();
     
-    m_mtxRecording.EnterMutex();
-    
-    if ( 
-	  ( m_bRecording                        == FALSE ) && 
-	  ( m_rStreamReader.GetRawMailboxSize() ==     0 )
-       )
+    switch ( GetStatus() )
     {
-      //Release mutex
-      m_mtxRecording.LeaveMutex();
-            
-      if ( m_pAVEncoder == NULL )
+      case eSEWaiting:
       {
-	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
-	FThread::Sleep(
-			RecdConfig::GetInstance().GetEncoderStandByDelay( m_rStreamReader.GetCameraName(), NULL )
-		      );
-      }
-      else
-      {
-	m_sDestination.Empty();
-	
-	LOG_INFO( "Close Encoder", Run() )
-	if ( m_pAVEncoder->close() != eAVSucceded )
+	RecdMbxItem* _pMbxItem = m_rStreamReader.PopRawItem( _dwReadingTimeout, TRUE );
+	if ( _pMbxItem != NULL )
 	{
-	  ERROR_INFO( "Failed to close encoder.", Run() )
-	}
-	
-	delete m_pAVEncoder;
-	m_pAVEncoder = NULL;
-	
-	// Signal termination
-	m_semStop.Post();
-	FThread::YieldThread();
-      }
-    }
-    else  
-    {
-      CAVFrame* _pFrame = m_rStreamReader.GetRawFrame(
-			  RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL ),
-			  TRUE
-			);
-      if ( _pFrame ==  NULL ) 
-      {
-	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
-	
-	//Release mutex
-	m_mtxRecording.LeaveMutex();
-	continue;
-      }
-      
-      if ( ( m_pAVEncoder == NULL ) && ( m_bRaw == TRUE ) )
-      {
-	// If the encoder is closed and we got a sample frame we will skip it
-	// untile the first video frame will be readed.
-	if ( _pFrame->getImage() == NULL )
-	{	  
-	  // Release memory.
-	  m_rStreamReader.ReleaseFrame( _pFrame );
+	  if ( _pMbxItem->GetType() == RecdMbxItem::eCommandItem ) 
+	  {
+	    if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStartEncoding )
+	    {
+	      if ( m_bRender == TRUE )
+		m_pMbxItems->Write( new RecdMbxItem( RecdMbxItem::eCmdStartEncoding ) );
 
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	      SetStatus( eSEOpenStream );
+	    }
+	  }
+	  
+	  // Release memory.
+	  m_rStreamReader.ReleaseMbxItem( _pMbxItem );
 	}
-	
+	else
+	{
+	  VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
+	  FThread::Sleep( _dwStandbyTimeout );
+	}
+      }; break;
+      
+      case eSEOpenStream:
+      {
 	FString _sCameraName  = m_rStreamReader.GetCameraName();
+
+	// Initialize Render options before moving to next status in the automata.
+	// If this values are not initialized result will be to work with defaults values.
+	_dFPS          = 1.0 / (double)RecdConfig::GetInstance().GetEncoderFps( _sCameraName, NULL );
+	_dFpsError     = 0.0;
+	_iRenderWidth  = RecdConfig::GetInstance().GetRenderRectWidth      ( _sCameraName, NULL );
+	_iRenderHeight = RecdConfig::GetInstance().GetRenderRectHeight     ( _sCameraName, NULL );
+	_dwEncoderOpts = RecdConfig::GetInstance().GetEncoderRescaleOptions( _sCameraName, NULL );
+	
+	// Check if raw video is required.
+	if ( m_bRaw == FALSE )
+	{
+	  SetStatus( eSEEncoding );
+	  break;
+	}
 	
 	FString _sOutFilename( 0, "%s/%s_%010d.mp4", (const char*)m_sDestination, (const char*)_sCameraName, time(NULL) ); 
 	
@@ -234,107 +246,293 @@ VOID	RecdStreamEncoder::Run()
 	{
 	  ERROR_INFO( "Not Enough Memory for allocating CAVEncoder()", Run() )
 	  
-	  // Release memory.
-	  m_rStreamReader.ReleaseFrame( _pFrame );
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  SetStatus( eSEReleasing );
+	  break;
 	}
 	
+	// With and Height for the final raw video
 	int _iWidth  = RecdConfig::GetInstance().GetEncoderWidth ( _sCameraName, NULL );
 	int _iHeight = RecdConfig::GetInstance().GetEncoderHeight( _sCameraName, NULL );
-	if (_iWidth  == -1 )
-	  _iWidth = _pFrame->getImage()->getWidth();
 	
-	if (_iHeight == -1 )
-	  _iHeight = _pFrame->getImage()->getHeight();
+	// Release background image if previously allocated.
+	m_rgbaBkg.free();
+	// Check if background has be enabled or not.
+	if ( RecdConfig::GetInstance().GetEncoderBackgroundStatus( _sCameraName, NULL ) == TRUE )
+	{
+	  //Loading background image.
+	  FString sBkgFilename     = RecdConfig::GetInstance().GetEncoderBackground( _sCameraName, NULL );
+	  if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
+	  {
+	    ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgFilename ), Run() )
+	  }
 	
+	  if (_iWidth  == -1 )
+	    _iWidth  = m_rgbaBkg.getWidth();
+	  
+	  if (_iHeight == -1 )
+	    _iHeight = m_rgbaBkg.getHeight();
+	  
+	  _avAlphaBlendingPos.set(   
+			    RecdConfig::GetInstance().GetEncoderRectX( m_rStreamReader.GetCameraName(), NULL ), 
+			    RecdConfig::GetInstance().GetEncoderRectY( m_rStreamReader.GetCameraName(), NULL )
+			  );
+			  
+	  _avAlphaBlendingRect = CAVRect(
+			    0, 
+			    0, 
+			    RecdConfig::GetInstance().GetEncoderRectWidth( m_rStreamReader.GetCameraName(), NULL ), 
+			    RecdConfig::GetInstance().GetEncoderRectHeight( m_rStreamReader.GetCameraName(), NULL )
+			  );
+	}
+
+	// If we have no skin! raw rendering will be impossible
+	if ( ( _iWidth == -1 ) || (_iHeight == -1 ) )
+	{
+	  ERROR_INFO( "RAW Width and/or Height NOT DEFINED! CHECK YOUR CONFIGURATION", Run() )
+
+	  break;
+	}
+
 	LOG_INFO( FString( 0, "CAM=[%s] OUT=[%s]", (const char*)_sCameraName, (const char*)_sOutFilename ), Run() )
 	AVResult _avRes = m_pAVEncoder->open( 
 					    _sOutFilename,
-					    AV_ENCODE_VIDEO_STREAM,
+					    AV_ENCODE_VIDEO_STREAM|AV_ENCODE_AUDIO_STREAM,
 					    _iWidth,
 					    _iHeight,
 					    RecdConfig::GetInstance().GetEncoderFps       ( _sCameraName, NULL ),
 					    RecdConfig::GetInstance().GetEncoderGoP       ( _sCameraName, NULL ),
 					    RecdConfig::GetInstance().GetEncoderBitRate   ( _sCameraName, NULL ),
-					    (CodecID)RecdConfig::GetInstance().GetEncoderVideoCodec( _sCameraName, NULL )
+					    (CodecID)RecdConfig::GetInstance().GetEncoderVideoCodec( _sCameraName, NULL ),
+					    RecdConfig::GetInstance().GetEncoderVideoCodecProfile( _sCameraName, NULL )
 					);
 	if ( _avRes != eAVSucceded )
 	{
 	  ERROR_INFO( FString( 0, "Failed to Open Encoder [%s]", (const char*)_sOutFilename ), Run() )
 	  
-	  delete m_pAVEncoder;
-	  m_pAVEncoder = NULL;
-	  
-	  // Release memory.
-	  m_rStreamReader.ReleaseFrame( _pFrame );
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  SetStatus( eSEReleasing );
+	  break;
 	}
 	
-	_dFPS          = 1.0 / (double)RecdConfig::GetInstance().GetEncoderFps( _sCameraName, NULL );
-	_iRenderWidth  = RecdConfig::GetInstance().GetRenderRectWidth( m_rStreamReader.GetCameraName(), NULL );
-	_iRenderHeight = RecdConfig::GetInstance().GetRenderRectHeight( m_rStreamReader.GetCameraName(), NULL );
-	_dwRenderOpts  = RecdConfig::GetInstance().GetEncoderRescaleOptions( m_rStreamReader.GetCameraName(), NULL );
+	// Invalidate fps stop watch
+	m_swFPS.Invalidate();
 
-      } //if ( _pAVEncoder == NULL )
+	// Move to next state
+	SetStatus( eSEEncoding );
+      }; break;
       
-      m_swFPS.Reset();
-      
-      if ( m_bRender == TRUE )
+      case eSEEncoding:
       {
-	/**
-	* Each frame retrieved from reader will be resized for the final render.
-	* The reason why this part of code resides here instead of Render thread 
-	* is to better balance cpu(s) allocation time at kenel level and so to 
-	* distribute complexity.
-	*/
-	if ( m_pMbxFrames->GetSize() >= RecdConfig::GetInstance().GetEncoderMaxItems( m_rStreamReader.GetCameraName(), NULL ) )
+	RecdMbxItem* _pMbxItem = NULL;
+	
+	_dwReadingTimeout = (_dFpsError>=_dFPS)?1:RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
+	
+	_pMbxItem = m_rStreamReader.PopRawItem( _dwReadingTimeout, TRUE );
+	if ( _pMbxItem == NULL )   
 	{
-	  ERROR_INFO( FString( 0, "Consumer Thread (RENDER) is TOO SLOW queue is full SIZE[%d].", m_pMbxFrames->GetSize() ), Run() )
-	}
-	else
-	{
-	  // Just Video Frame will be dispatched to RecdRenderEncoder
-	  if ( _pFrame->getImage() != NULL )
+	  if ( m_pVideoItems->IsEmpty() )
 	  {
-	    CAVImage* pAVImage = new CAVImage();
-			    pAVImage->init( *_pFrame->getImage(), 
-			    _iRenderWidth, 
-			    _iRenderHeight, 
-			    PIX_FMT_RGB24,
-			    _dwRenderOpts
-			    );
-	    
-	    //Write a new frame into mailbox for rendering
-	    m_pMbxFrames->Write( new CAVFrame( pAVImage ) );
+	    VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
+	    continue;
+	  }
+	  else
+	  {
+	    _pMbxItem = m_pVideoItems->Pop( false );
 	  }
 	}
-      }//if ( m_bRender == TRUE )
-      
-      if ( m_pAVEncoder != NULL )
-      {
-	if ( m_pAVEncoder->write( _pFrame, AV_INTERLEAVED_AUDIO_WR /*@todo move in conf*/ ) != eAVSucceded )
+	
+	
+	switch ( _pMbxItem->GetType() )
 	{
-	    ERROR_INFO( "Failed to encode frame.", Run() )
+	  case RecdMbxItem::eCommandItem:
+	  {
+	    if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStopEncoding )
+	    {
+	      if ( m_bRender == TRUE )
+		m_pMbxItems->Write( new RecdMbxItem( RecdMbxItem::eCmdStopEncoding ) );
+	      
+	      SetStatus( eSEReleasing );
+	    }
+	  }; break;
+	  
+	  case RecdMbxItem::eImageItem:
+	  {
+	    // It is necessary to check if queue is empty in order to 
+	    // avoid FTQueue exception raising.
+	    // Checking that current frame is a new frame and do not
+	    // match with first element in queue.
+	    if (
+	        ( m_pVideoItems->IsEmpty()                 ) ||
+		( _pMbxItem != m_pVideoItems->Pop( FALSE ) )
+	       )
+	    {
+	      m_pVideoItems->Push( _pMbxItem );
+	    }
 	    
-	    delete m_pAVEncoder;
-	    m_pAVEncoder = NULL;
-	}
-      }//if ( m_bRaw == TRUE )
+	    // Just in case enqueued frames is bigger than max
+	    // we will drop the older frame and then the one 
+	    // after will be processed.
+	    if ( m_pVideoItems->GetSize() > _dwEncoderMaxItems )
+	    {
+	      _pMbxItem = m_pVideoItems->Pop();
+	      
+	      // Release frame.
+	      m_rStreamReader.ReleaseMbxItem( _pMbxItem );
+	      
+	      VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", Run() )
+	    }
+	    
+	    if (
+		( m_swFPS.IsValid() == FALSE ) ||
+		( m_swFPS.Peek()    >= _dFPS ) 
+	      )
+	    {
+	      // Cumulative error
+	      _dFpsError += m_swFPS.Peek() - _dFPS;
+	      
+	      m_swFPS.Reset();
+	      
+	      _pMbxItem = m_pVideoItems->Pop();
+	    }
+	    else if ( _dFpsError >= _dFPS )
+	    {
+	      _dFpsError -= _dFPS;
+	      
+	      _pMbxItem = m_pVideoItems->Pop();
+	    }  
+	    else // move to next loop
+	    {
+	      continue;
+	    }
+	    
+	    	    
+	    if ( m_bRender == TRUE )
+	    {
+	      /**
+	       * Each frame retrieved from reader will be resized for the final render.
+	       * The reason why this part of code resides here instead of Render thread 
+	       * is to better balance cpu(s) allocation time at kenel level and so to 
+	       * distribute complexity.
+	       */
+	      if ( m_pMbxItems->GetSize() >= _dwEncoderMaxItems )
+	      {
+		ERROR_INFO( FString( 0, "Consumer Thread (RENDER) is TOO SLOW queue is full SIZE[%d].", m_pMbxItems->GetSize() ), Run() )
+	      }
+	      else
+	      {
+		// Video Frame will be dispatched to RecdRenderEncoder
+		CAVImage* pAVImage = new CAVImage();
+		pAVImage->init( *_pMbxItem->GetImage(), 
+				_iRenderWidth, 
+				_iRenderHeight, 
+				PIX_FMT_RGBA,
+				_dwEncoderOpts
+			      );
+		
+		//Write a new frame into mailbox for rendering
+		m_pMbxItems->Write( new RecdMbxItem( pAVImage ) );
+	      }
+	    }//if ( m_bRender == TRUE )
+	    
+	    
+	    if ( m_bRaw == TRUE )
+	    {
+	      AVResult eResult;
+	  
+	      // If background is valid alpha blending is required.
+	      if ( m_rgbaBkg.isValid() )
+	      {
+		_avFrameRGBA.init( 
+				   *_pMbxItem->GetImage(), 
+				   _avAlphaBlendingRect.getWidth(), 
+				   _avAlphaBlendingRect.getHeight(), 
+				   PIX_FMT_RGBA,
+				   _dwEncoderOpts
+			         );
+	
+		// In this case _pFrame is an RGBA image
+		m_rgbaBkg.blend( _avAlphaBlendingPos, _avFrameRGBA );
 
+		// initialize autput frame.
+		_avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
+	      }
+	      else
+	      {
+		// initialize autput frame.
+		_avFrameYUV.init( 
+				  *_pMbxItem->GetImage(),
+				  m_pAVEncoder->getVideoWidth(),
+				  m_pAVEncoder->getVideoHeight(),
+				  PIX_FMT_YUV420P,
+				  _dwEncoderOpts
+			        );
+	      }
+	      	      
+	      // Encoding and write output frame.
+	      eResult = m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR );
+	      
+	      // Check for a possible error during encoding.
+	      if ( eResult != eAVSucceded )
+	      {
+		  ERROR_INFO( "Failed to encode frame.", Run() )
+		  
+		  SetStatus( eSEReleasing );
+	      }
+	    }//if ( m_bRaw == TRUE )
+	    
+	  }; break;
+	  
+	  case RecdMbxItem::eSampleItem:
+	  {
+	    // nothing to do.
+	  }; break;
+	}// switch ( _pMbxItem->GetType() )
+	
+	// Each item must be released.
+	m_rStreamReader.ReleaseMbxItem( _pMbxItem );
       
-      // Release memory.
-      m_rStreamReader.ReleaseFrame( _pFrame );
-      //Release mutex
-      m_mtxRecording.LeaveMutex();
+      }; break;
       
-      while ( m_swFPS.Peek() < _dFPS )
-	FThread::YieldThread();
-      
-    }// if ( m_bRecording == FALSE )
+      case eSEReleasing:
+      {
+	// Cleaning local queue
+	RecdMbxItem* _pMbxItem = NULL;
+	
+	while ( !m_pVideoItems->IsEmpty() )
+	{
+	  _pMbxItem = m_pVideoItems->Pop();
+	  
+	  // Each item must be released.
+	  m_rStreamReader.ReleaseMbxItem( _pMbxItem );
+	}
+	
+	LOG_INFO( "Dispatching Stop Encoding Command", Run() )
+	// Writing messages for consumers
+	// Event there is an error on reading or it will be terminated by user request
+	// we will dispatch Stop Encoding commando to each consumer.
+	if ( m_bRender == TRUE )
+	{
+	  m_pMbxItems->Write       ( new RecdMbxItem( RecdMbxItem::eCmdStopEncoding ) );
+	}
+	
+	LOG_INFO( "Close and Release CAVEncoder instance", Run() )
+
+	if ( m_pAVEncoder != NULL )
+	{
+	  if ( m_pAVEncoder->close() != eAVSucceded )
+	  {
+	    ERROR_INFO( "Failed to close encoder.", Run() )
+	  }
+	    
+	  delete m_pAVEncoder;
+	  m_pAVEncoder = NULL;
+	}
+	
+	// Move to initial state
+	SetStatus( eSEWaiting );
+      }; break; 
+    }//switch ( GetStatus() )
+    
+    
   }// while ( !m_bExit )
 }
 

@@ -23,6 +23,7 @@
 #include "LOGGING/FLogger.h"
 
 #include "avimage.h"
+#include "avfiltergraph.h"
 
 
 GENERATE_CLASSINFO( RecdStreamReader, FLogThread ) 
@@ -32,27 +33,28 @@ RecdStreamReader::RecdStreamReader(
 				    const FString& sIpCamera
 				  )
   : FLogThread( sStreamReaderName, NULL, FThread::TP_HIGHEST, -1 ),
+   m_eReaderStatus( eRSUndefined ),
    m_sIpCamera( sIpCamera ),
    m_bExit( FALSE ),
-   m_bReading( FALSE ),
    m_pAvReader( NULL ),
    m_bGotKeyFrame( FALSE ),
    m_dStopWatchCMP( 0.0 ),
-   m_pMbxRawFrames( NULL ),
-   m_pMbxHighLightsFrames( NULL )
+   m_dwReaderMaxItems( 0 ),
+   m_pMbxRawItems( NULL ),
+   m_pMbxHighLightsItems( NULL )
 {
   (GET_LOG_MAILBOX())->SetLogMessageFlags( GetLogMessageFlags()     );
   (GET_LOG_MAILBOX())->SetVerbosityFlags ( GetVerbosityLevelFlags() );  
   
-  m_pMbxRawFrames = new FTMailbox<CAVFrame* >( "Mailbox Decoding Frames", NULL );
-  if ( m_pMbxRawFrames == NULL )
+  m_pMbxRawItems = new FTMailbox<RecdMbxItem* >( "Mailbox Decoding Frames", NULL );
+  if ( m_pMbxRawItems == NULL )
   {
     ERROR_INFO( "Not Enough Memory for allocating Mailbox", RecdStreamReader() )
     //@todo
   }
 
-  m_pMbxHighLightsFrames = new FTMailbox<CAVFrame* >( "Mailbox Decoding Frames", NULL );
-  if ( m_pMbxHighLightsFrames == NULL )
+  m_pMbxHighLightsItems = new FTMailbox<RecdMbxItem* >( "Mailbox Decoding Frames", NULL );
+  if ( m_pMbxHighLightsItems == NULL )
   {
     ERROR_INFO( "Not Enough Memory for allocating Mailbox", RecdStreamReader() )
     //@todo
@@ -64,34 +66,34 @@ RecdStreamReader::RecdStreamReader(
 
 RecdStreamReader::~RecdStreamReader()
 {
-  if ( m_pMbxRawFrames != NULL )
+  if ( m_pMbxRawItems != NULL )
   {
     LOG_INFO( "Release mailbox resources", ~RecdStreamReader() )
     // Delete all allocated items
-    while ( !m_pMbxRawFrames->IsEmpty() )
+    while ( !m_pMbxRawItems->IsEmpty() )
     {
-      CAVFrame* pFrame = m_pMbxRawFrames->Read();
+      RecdMbxItem* pFrame = m_pMbxRawItems->Read();
       delete pFrame;
     }
     
     // Release mailbox.
-    delete m_pMbxRawFrames;
-    m_pMbxRawFrames = NULL;
+    delete m_pMbxRawItems;
+    m_pMbxRawItems = NULL;
   }
   
-  if ( m_pMbxHighLightsFrames != NULL )
+  if ( m_pMbxHighLightsItems != NULL )
   {
     LOG_INFO( "Release mailbox resources", ~RecdStreamReader() )
     // Delete all allocated items
-    while ( !m_pMbxHighLightsFrames->IsEmpty() )
+    while ( !m_pMbxHighLightsItems->IsEmpty() )
     {
-      CAVFrame* pFrame = m_pMbxHighLightsFrames->Read();
+      RecdMbxItem* pFrame = m_pMbxHighLightsItems->Read();
       delete pFrame;
     }
     
     // Release mailbox.
-    delete m_pMbxHighLightsFrames;
-    m_pMbxHighLightsFrames = NULL;
+    delete m_pMbxHighLightsItems;
+    m_pMbxHighLightsItems = NULL;
   }
 }
 
@@ -100,79 +102,109 @@ const FString&  RecdStreamReader::GetCameraName() const
   return m_sIpCamera;
 }
   
-CAVFrame* 	RecdStreamReader::GetRawFrame( DWORD dwTimeout, BOOL bRemove )
+RecdMbxItem* 	RecdStreamReader::PopRawItem( DWORD dwTimeout, BOOL bRemove )
 {
-  if ( m_pMbxRawFrames == NULL )
+  if ( m_pMbxRawItems == NULL )
     return NULL;
   
-  return m_pMbxRawFrames->Read( dwTimeout, bRemove );
+  return m_pMbxRawItems->Read( dwTimeout, bRemove );
 }
 
-CAVFrame* 	RecdStreamReader::GetHighLightsFrame( DWORD dwTimeout, BOOL bRemove )
+RecdMbxItem* 	RecdStreamReader::PopHighLightsItem( DWORD dwTimeout, BOOL bRemove )
 {
-  if ( m_pMbxHighLightsFrames == NULL )
+  if ( m_pMbxHighLightsItems == NULL )
     return NULL;
   
-  return m_pMbxHighLightsFrames->Read( dwTimeout, bRemove );
+  return m_pMbxHighLightsItems->Read( dwTimeout, bRemove );
+}
+
+BOOL            RecdStreamReader::PushHighLightsItem( RecdMbxItem* pMbxItem )
+{
+  if ( m_pMbxHighLightsItems == NULL )
+    return FALSE;
+  
+  m_pMbxHighLightsItems->Write( pMbxItem );
+  
+  return TRUE;
 }
 
 DWORD 	 	RecdStreamReader::GetRawMailboxSize() const
 {
-  return m_pMbxRawFrames->GetSize();
+  return m_pMbxRawItems->GetSize();
 }
 
 DWORD 	 	RecdStreamReader::GetHighLightsMailboxSize() const
 {
-  return m_pMbxHighLightsFrames->GetSize();
+  return m_pMbxHighLightsItems->GetSize();
 }
 
-VOID 	 	RecdStreamReader::ReleaseFrame( CAVFrame*& pAVFrame )
+VOID 	 	RecdStreamReader::ReleaseMbxItem( RecdMbxItem*& pMbxItem )
 {
-  if ( pAVFrame == NULL )
+  if ( pMbxItem == NULL )
     return ;
   
-  delete pAVFrame;
-  pAVFrame = NULL;
+  delete pMbxItem;
+  pMbxItem = NULL;
 }
 
-VOID   RecdStreamReader::SetReading( BOOL bEnable )
+enum RecdStreamReader::ReaderStatus RecdStreamReader::GetStatus( DOUBLE* pdElapsed, DOUBLE* pdTotal ) const
 {
-  BOOL _bWaitClose = FALSE;
-  
-  m_mtxReading.EnterMutex();
-  
-    // Both Start and Stop are affected from the following StopWatch.
-    // When changing state the StopWatch will be set to ZERO, so start
-    // and stop will be delayed for the specified time.
-    m_swStopReading.Reset();
+  FMutexCtrl  _mtxCtrl( m_mtxReader );
 
-    if ( bEnable == TRUE )
-      m_dStopWatchCMP = RecdConfig::GetInstance().GetReaderStartDelayTime( NULL );
-    else
-      m_dStopWatchCMP = RecdConfig::GetInstance().GetReaderStopDelayTime( NULL );
-    
-    if ( 
-	( bEnable     == FALSE ) &&
-	( m_pAvReader != NULL  )
+  if ( pdElapsed != NULL )
+  {
+    *pdElapsed = 0.0;
+    if (
+	( m_eReaderStatus == eRSBuffering ) ||
+	( m_eReaderStatus == eRSFlushing  )
       )
     {
-      _bWaitClose = TRUE;
+      *pdElapsed = m_swStopReading.Peek();
+      if ( *pdElapsed > m_dStopWatchCMP )
+	*pdElapsed = m_dStopWatchCMP;
+
+      if ( pdTotal != NULL )
+	*pdTotal = m_dStopWatchCMP;
     }
-    m_bReading = bEnable;
-  
-  m_mtxReading.LeaveMutex();
-  
-  if ( _bWaitClose == TRUE )
-  {
-    m_semStop.Wait();
   }
+  
+  VERBOSE_INFO( 
+		FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, 
+		FString( 0, "Current Readers Status [%d][%.2f][%.2f]", m_eReaderStatus, m_swStopReading.Peek(), m_dStopWatchCMP ), 
+	        GetStatus() 
+	      )
+
+  return m_eReaderStatus;
+}
+
+bool              RecdStreamReader::SetStatus( ReaderStatus eStatus )
+{
+  FMutexCtrl  _mtxCtrl( m_mtxReader );
+
+  if (
+       ( eStatus == eRSOpenStream ) ||
+       ( eStatus == eRSFlushing   )
+     )
+  {
+    m_dStopWatchCMP = RecdConfig::GetInstance().GetReaderBufferingTime( NULL );
+    m_swStopReading.Reset();
+  }
+  
+  m_eReaderStatus = eStatus;
+  
+  return true;
 }
 
 void   RecdStreamReader::OnVideoKeyFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst )
 {
-  if ( m_bReading == TRUE )
-  {  
-    m_bGotKeyFrame = TRUE;
+  m_bGotKeyFrame = TRUE;
+  
+  if ( m_bGotKeyFrame )
+  {
+    m_fps.init( 
+		1/av_q2d(pAVCodecCtx->time_base),
+		(DOUBLE)RecdConfig::GetInstance().GetReaderFpsLimits( GetCameraName(), NULL )
+	      );
   }
 }
 
@@ -182,44 +214,113 @@ bool   RecdStreamReader::OnVideoFrame(
 					double pst 
 				     )
 {
-  if ( m_bGotKeyFrame == TRUE )
+  // If filters has been enabled all operation must be performed in OnFilteredVideoFrame() event
+  if ( m_bFilters == TRUE )
+    return true;
+  
+  // Video processing will be avoided until the first Key frame will be received.
+  if ( m_bGotKeyFrame == FALSE )
+    return true;
+  
+  // Check if current frame must be delete.
+  // This condition could happens when source fps greater than whished fps
+  if ( m_fps.bDrop() )
   {
-    if ( m_pMbxRawFrames->GetSize() >= RecdConfig::GetInstance().GetReaderMaxItems( m_sIpCamera, NULL ) )
-    {
-      ERROR_INFO( "Consumer Thread is TOO SLOW queue is full.", OnVideoFrame() )
-      return true;
-    }
+    m_fps.reset();
     
+    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", Run() )
+
+    return true;    
+  }
+
+  if ( m_pMbxRawItems->GetSize()       <= m_dwReaderMaxItems )
+  {
     CAVImage*  _pAVRawImage      = new CAVImage();
+    
+    // Initialized to original W:H
     _pAVRawImage->init( 
 	    pAVFrame, 
 	    pAVCodecCtx,
 	    -1,
 	    -1, 
-	    PIX_FMT_YUV420P, 
+	    PIX_FMT_RGBA, 
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL ) 
 	);
 
-    m_pMbxRawFrames->Write       ( new CAVFrame( _pAVRawImage      ) );
-
+    m_pMbxRawItems->Write       ( new RecdMbxItem( _pAVRawImage      ) );
+  }
     
+  if ( m_pMbxHighLightsItems->GetSize() <= m_dwReaderMaxItems )
+  {
     CAVImage* _pHighLightsImage = new CAVImage();
+    BOOL      _bBkgStatus       = RecdConfig::GetInstance().GetHighLightsBackgroundStatus( m_sIpCamera, NULL );
+
+    // Initialized to HIGHLIGHTS VIDEO SETTINGS W:H when background is not active
+    // Initialized to HIGHLIGHTS RECT           W:H when background is active
     _pHighLightsImage->init( 
 	    pAVFrame, 
 	    pAVCodecCtx,
-	    RecdConfig::GetInstance().GetHighLightsRectWidth( m_sIpCamera, NULL ), 
-	    RecdConfig::GetInstance().GetHighLightsRectHeight( m_sIpCamera, NULL ), 
-	    RecdConfig::GetInstance().GetHighLightsBackgroundStatus( m_sIpCamera, NULL )?PIX_FMT_RGB24:PIX_FMT_YUV420P,
+	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectWidth( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderWidth( m_sIpCamera, NULL ), 
+	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectHeight( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderHeight( m_sIpCamera, NULL ), 
+	    _bBkgStatus?PIX_FMT_RGBA:PIX_FMT_YUV420P,
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL )
 	);
-    m_pMbxHighLightsFrames->Write( new CAVFrame( _pHighLightsImage ) );
-       
+    m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage ) );
+  }       
     
-    VERBOSE_INFO( 
-		  FLogMessage::VL_HIGH_PERIODIC_MESSAGE, 
-		  FString( 0, "Mailboxes RAW Size=[%u] HL Size=[%u]", m_pMbxRawFrames->GetSize(), m_pMbxHighLightsFrames->GetSize() ),
-		  OnVideoFrame() 
-		)
+  VERBOSE_INFO( 
+		FLogMessage::VL_HIGH_PERIODIC_MESSAGE, 
+		FString( 0, "Mailboxes RAW Size=[%u] HL Size=[%u]", m_pMbxRawItems->GetSize(), m_pMbxHighLightsItems->GetSize() ),
+		OnVideoFrame() 
+	      )
+  
+  
+  return true;
+}
+
+bool    RecdStreamReader::OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVCodecContext* pAVCodecCtx, double pst )
+{
+  // Video processing will be avoided until the first Key frame will be received.
+  if ( m_bGotKeyFrame == FALSE )
+    return true;
+    
+  // Check if current frame must be delete.
+  // This condition could happens when source fps greater than whished fps
+  if ( m_fps.bDrop() )
+  {
+    m_fps.reset();
+    
+    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", Run() )
+
+    return true;    
+  }
+  
+  if ( m_pMbxRawItems->GetSize()       <= m_dwReaderMaxItems )
+  {
+    CAVImage*  _pAVRawImage      = new CAVImage();
+    
+    // Initialized to original W:H
+    _pAVRawImage->init( pAVFilterBufferRef, pAVCodecCtx->width, pAVCodecCtx->height ); 
+
+    m_pMbxRawItems->Write       ( new RecdMbxItem( _pAVRawImage      ) );
+  }
+  
+  if ( m_pMbxHighLightsItems->GetSize() <= m_dwReaderMaxItems )
+  {
+    CAVImage* _pHighLightsImage = new CAVImage();
+    BOOL      _bBkgStatus       = RecdConfig::GetInstance().GetHighLightsBackgroundStatus( m_sIpCamera, NULL );
+
+    // Initialized to HIGHLIGHTS VIDEO SETTINGS W:H when background is not active
+    // Initialized to HIGHLIGHTS RECT           W:H when background is active
+    _pHighLightsImage->init( 
+	    pAVFilterBufferRef, 
+	    pAVCodecCtx->width, pAVCodecCtx->height,
+	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectWidth( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderWidth( m_sIpCamera, NULL ), 
+	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectHeight( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderHeight( m_sIpCamera, NULL ), 
+	    _bBkgStatus?PIX_FMT_RGBA:PIX_FMT_YUV420P,
+	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL )
+	);
+    m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage ) );
   }
   
   return true;
@@ -227,14 +328,23 @@ bool   RecdStreamReader::OnVideoFrame(
 
 bool    RecdStreamReader::OnAudioFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst )
 {
-  CAVSample* pRawSample = new CAVSample();
-  CAVSample* pHLSample  = new CAVSample();
-  
-  pRawSample->init(pAVFrame, pAVCodecCtx);
-  pHLSample->init (pAVFrame, pAVCodecCtx);
-  
-  m_pMbxRawFrames->Write       ( new CAVFrame( pRawSample ) );
-  m_pMbxHighLightsFrames->Write( new CAVFrame( pHLSample  ) );
+  if ( m_pMbxRawItems->GetSize()        <= m_dwReaderMaxItems )
+  {
+    CAVSample* pRawSample = new CAVSample();
+    
+    pRawSample->init(pAVFrame, pAVCodecCtx);
+    
+    m_pMbxRawItems->Write       ( new RecdMbxItem( pRawSample ) );
+  }
+    
+  if ( m_pMbxHighLightsItems->GetSize() <= m_dwReaderMaxItems )
+  {
+    CAVSample* pHLSample  = new CAVSample();
+    
+    pHLSample->init (pAVFrame, pAVCodecCtx);
+    
+    m_pMbxHighLightsItems->Write( new RecdMbxItem( pHLSample  ) );
+  }  
   
   return true;
 }
@@ -250,122 +360,193 @@ BOOL	RecdStreamReader::Final()
   
   return TRUE;
 }
-  CAVDecoder _decoder;
-
+  
 VOID	RecdStreamReader::Run()
 {
-  AVResult      _avResult  = eAVUndefined;
+  AVResult      _avResult         = eAVUndefined;
+  DWORD         _dwStandbyTimeout = RecdConfig::GetInstance().GetReaderStandByDelay( m_sIpCamera, NULL );
+  // Update status to waiting mode.
+  SetStatus( eRSWaiting );
   
   while ( !m_bExit )
   {
     FThread::YieldThread();
-    
-    m_mtxReading.EnterMutex();
-    
-    if (
-	  ( m_bReading             == FALSE           ) &&
-	  ( m_swStopReading.Peek()  > m_dStopWatchCMP ) 
-       )
+
+    switch ( GetStatus( NULL, NULL ) )
     {
-      //Release mutex
-      m_mtxReading.LeaveMutex();
-      
-      if ( m_pAvReader == NULL )
+      case eRSWaiting:
       {
 	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
-	FThread::Sleep(
-			RecdConfig::GetInstance().GetReaderStandByDelay( m_sIpCamera, NULL )
-		      );
-      }
-      else
+	FThread::Sleep( _dwStandbyTimeout );
+      }; break;
+      
+      case eRSOpenStream:
       {
-	LOG_INFO( "Close Reader", Run() )
-	if ( m_pAvReader->close() != eAVSucceded )
+	LOG_INFO( "Dispatching Start Encoding Command", Run() )
+
+	// Writing messages for consumers
+	m_pMbxRawItems->Write       ( new RecdMbxItem( RecdMbxItem::eCmdStartEncoding ) );
+
+	// Keep value into member variable in order to avoid continue conversions.
+	m_dwReaderMaxItems = RecdConfig::GetInstance().GetReaderMaxItems( m_sIpCamera, NULL );
+	
+	// TRUE if filters has been enabled False otherwise.
+	m_bFilters         = RecdConfig::GetInstance().GetReaderFiltersStatus( m_sIpCamera, NULL );
+	
+	CAVFilterGraph* _pAVFilterGraph = NULL;
+	if ( m_bFilters == TRUE )
 	{
-	  ERROR_INFO( "Failed to close encoder.", Run() )
+	  FString _sSectionName = RecdConfig::GetInstance().GetReaderFiltersSettings( m_sIpCamera, NULL );
+	  FString _sFiltersConf = RecdConfig::GetInstance().GetReaderFiltersConfiguration( _sSectionName, NULL );
+	  
+	  LOG_INFO( FString( 0, "FilterGraph Setting = [%s]", (const char*)_sFiltersConf ), Run() )
+	  _pAVFilterGraph =  new CAVFilterGraph( _sFiltersConf );
 	}
 	
-	//
+	LOG_INFO( "Allocate new CAVDecoder", Run() )
+	  
+	m_pAvReader = new CAVDecoder();
+	if ( m_pAvReader == NULL )
+	{
+	  ERROR_INFO( "Not Enough Memory for allocating CAVDecoder()", Run() )
+	  
+	  SetStatus( eRSReleasing );
+	  break;
+	}
+
+	if ( m_pAvReader->setDecoderEvents( this, false ) != eAVSucceded )
+	{
+	  ERROR_INFO( "Failed to Set Events Handler", Run() )
+
+	  SetStatus( eRSReleasing );
+	  break;
+	}
+
+	if ( _pAVFilterGraph )
+	{
+	  LOG_INFO( "Enabling Reader FilterGraph", Run() )
+	  
+	  m_pAvReader->setFilterGraph( _pAVFilterGraph );
+	}
+		
+	FString _sURL = RecdConfig::GetInstance().GetReaderStream( m_sIpCamera, NULL );
+	DOUBLE  _dBuf = RecdConfig::GetInstance().GetReaderBufferingTime( NULL );
+
+	LOG_INFO( FString( 0, "Opening URL[%s]  BUF[%f]", (const char*)_sURL, _dBuf ), Run() );
+	  
+	_avResult = m_pAvReader->open( (const char*)_sURL, _dBuf, AV_SET_BEST_VIDEO_CODEC );
+	if ( _avResult != eAVSucceded )
+	{
+	  ERROR_INFO( FString( 0, "Failed to Open URL=[%s] Res[%i]", (const char*)_sURL, _avResult ), Run() )
+	  
+	  SetStatus( eRSReleasing );
+	  break;
+	}
+	  
+	_avResult = m_pAvReader->read( AVD_EXIT_ON_VIDEO_KEY_FRAME|AVD_EXIT_ON_BUFFERING );
+	if ( _avResult == eAVBuffering )
+	{
+	  SetStatus( eRSBuffering );
+	} 
+	else if ( _avResult == eAVSucceded )
+	{
+	  // Reset stop watch in order to avoid delay introduced by opening the stream.
+	  m_swStopReading.Peek();
+
+	  SetStatus( eRSReading   );
+	}
+	
+	if ( 
+	     ( _avResult != eAVSucceded  ) &&
+	     ( _avResult != eAVBuffering )
+	   )
+	{
+	  ERROR_INFO( FString( 0, "Failed to Read from input stream Res[%i]", _avResult ) , Run() )
+
+	  SetStatus( eRSReleasing );
+	  break;
+	}
+      }; break;
+      
+      case eRSBuffering:
+      {
+	_avResult = m_pAvReader->read( AVD_EXIT_ON_NEXT_VIDEO_FRAME|AVD_EXIT_ON_NEXT_AUDIO_FRAME );
+	if ( _avResult == eAVSucceded )
+	{
+	  
+	  SetStatus( eRSReading );
+	}
+	else if ( _avResult != eAVBuffering )
+	{
+	  ERROR_INFO( FString( 0, "Failed during buffering input stream Res[%i]", _avResult ) , Run() )
+
+	  SetStatus( eRSReleasing );
+	}
+      }; break;	
+      case eRSReading:
+      {
+	_avResult = m_pAvReader->read( AVD_EXIT_ON_NEXT_VIDEO_FRAME|AVD_EXIT_ON_NEXT_AUDIO_FRAME );
+	if ( _avResult != eAVSucceded  ) 
+	{
+	  ERROR_INFO( FString( 0, "Failed to Read from input stream Res[%i]", _avResult ) , Run() )
+
+	  SetStatus( eRSReleasing );
+	}
+      }; break;
+      
+      // This is not a real flush; reader just dalay close accordingly with configuration and
+      // then move to next state.
+      case eRSFlushing:
+      {
+	// Delay time before starting reading
+	if ( m_swStopReading.Peek() < m_dStopWatchCMP )
+	{
+	  _avResult = m_pAvReader->read( AVD_EXIT_ON_NEXT_VIDEO_FRAME|AVD_EXIT_ON_NEXT_AUDIO_FRAME );
+	  if ( _avResult != eAVSucceded )
+	  {
+	    SetStatus( eRSReleasing );
+	  }
+	  
+	  break;
+	}
+
+	// Move to next state in order to release allocated object.
+	SetStatus( eRSReleasing );
+      }; break;
+	
+      case eRSReleasing:
+      {	
+	LOG_INFO( "Dispatching Stop Encoding Command", Run() )
+	// Writing messages for consumers
+	// Event there is an error on reading or it will be terminated by user request
+	// we will dispatch Stop Encoding commando to each consumer.
+	m_pMbxRawItems->Write       ( new RecdMbxItem( RecdMbxItem::eCmdStopEncoding ) );
+	// Message will be dispatched also to Highlight thread in order to force closing
+	// encoder.
+	m_pMbxHighLightsItems->Write( new RecdMbxItem( RecdMbxItem::eCmdStopEncoding ) );
+	
+	LOG_INFO( "Close and Release CAVDecoder instance", Run() )
+
+	if ( m_pAvReader != NULL )
+	{
+	  if ( m_pAvReader->close() != eAVSucceded )
+	  {
+	    ERROR_INFO( "Failed to close encoder.", Run() )
+	  }
+	  
+	  delete m_pAvReader;
+	  m_pAvReader = NULL;
+	}
+	
+	// Reset key fram waiting
 	m_bGotKeyFrame = FALSE;
 	
-	delete m_pAvReader;
-	m_pAvReader = NULL;
-	
-	// Signal to exit from SetReading()
-	m_semStop.Post();
-	FThread::YieldThread();
-      }
-    }
-    else  
-    {
-      if ( m_pAvReader == NULL )
-      {
-	  LOG_INFO( "Allocate new CAVDecoder", Run() )
-	  
-	  m_pAvReader = new CAVDecoder();
-	  if ( m_pAvReader != NULL )
-	  {
-	    if ( m_pAvReader->setDecoderEvents( this, false ) != eAVSucceded )
-	    {
-	      ERROR_INFO( "Failed to Set Events Handler", Run() )
-	      
-	      delete m_pAvReader;
-	      m_pAvReader = NULL;
-	      
-	      m_mtxReading.LeaveMutex();
-	      continue;
-	    }
-	  }
-	  else
-	  {
-	    ERROR_INFO( "Not Enough Memory for allocating CAVDecoder()", Run() )
-	    
-	    m_mtxReading.LeaveMutex();
-	    continue;
-	  }
-	  
-	  FString _sURL = RecdConfig::GetInstance().GetReaderStream( m_sIpCamera, NULL );
-	  DOUBLE  _dBuf = RecdConfig::GetInstance().GetReaderBufferingTime( NULL );
-	  
-	  LOG_INFO( FString( 0, "Opening URL[%s]  BUF[%f]", (const char*)_sURL, _dBuf ), Run() );
-	  
-	  _avResult = m_pAvReader->open( (const char*)_sURL, _dBuf, AV_SET_BEST_VIDEO_CODEC );
-	  if ( _avResult != eAVSucceded )
-	  {
-	    ERROR_INFO( FString( 0, "Failed to Open URL=[%s] Res[%i]", (const char*)_sURL, _avResult ), Run() )
-	    
-	    delete m_pAvReader;
-
-	    m_pAvReader = NULL;
-	    m_mtxReading.LeaveMutex();
-	    continue;
-	  }
-	  
-	  _avResult = m_pAvReader->read( AVD_EXIT_ON_VIDEO_KEY_FRAME );
-	  if ( _avResult != eAVSucceded )
-	  {
-	    ERROR_INFO( FString( 0, "Failed to Read from input stream Res[%i]", _avResult ) , Run() )
-	    
-	    delete m_pAvReader;
-	    m_pAvReader = NULL;
-
-	    m_mtxReading.LeaveMutex();
-	    continue;
-	  }
-      }
+	// Update status to waiting mode.
+	SetStatus( eRSWaiting );
+      }; break;
       
-      _avResult = m_pAvReader->read( AVD_EXIT_ON_NEXT_VIDEO_FRAME );
-      if ( _avResult != eAVSucceded )
-      {
-	ERROR_INFO( FString( 0, "Failed to Read from input stream Res[%i]", _avResult ) , Run() )
-	
-	delete m_pAvReader;
-	m_pAvReader = NULL;
-      }
-      
-      //Release mutex
-      m_mtxReading.LeaveMutex();
-    } // if ( m_bRecording )
+    };
+ 
   }//while ( !m_bExit )
 
   if ( m_pAvReader != NULL )
@@ -379,6 +560,8 @@ VOID	RecdStreamReader::Run()
     m_pAvReader = NULL;
   }
 }
+
+
 
 DWORD   RecdStreamReader::GetLogMessageFlags() const
 {

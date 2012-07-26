@@ -1077,8 +1077,13 @@ VOID     RecdConfig::OnInitialize()
     {
 	case FConfigFileException::CFG_FILE_NOT_FOUND :
 	{
-	  THROW_MSG_EXCEPTION( RecdConfigException, FString( 0,"  Filed to open [%s]", (const char*)m_cfg.GetFileName() ), RecdConfigException::CFG_FILE_NOT_FOUND_OR_INACCESSIBLE
-  , OnInitialize()  )
+	  FString sMsg( 0,"  Failed to open [%s]", (const char*)m_cfg.GetFileName() );
+	  
+	  THROW_MSG_EXCEPTION( RecdConfigException, sMsg, RecdConfigException::CFG_FILE_NOT_FOUND_OR_INACCESSIBLE, OnInitialize()  )
+	}; break;
+	default:
+	{
+	  FString sMsg( 0,"  Error [%X] loading [%s]", ex.GetErrorCode(), (const char*)m_cfg.GetFileName() );
 	}; break;
     }
   }

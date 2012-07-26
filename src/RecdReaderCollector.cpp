@@ -30,6 +30,8 @@ IMPLEMENT_SINGLETON( RecdReaderCollector )
 
 VOID	RecdReaderCollector::OnInitialize()
 {
+  FMutexCtrl  _mtxCtrl( m_mtxReaders );
+
   FParameter*  _pIpCameras = RecdConfig::GetInstance().GetIpCameras( NULL );
   if ( _pIpCameras == NULL )
   {
@@ -70,7 +72,10 @@ VOID	RecdReaderCollector::OnInitialize()
 
 VOID	RecdReaderCollector::OnFinalize()
 {
-  LOG_INFO( FString( 0, "Release Running Stream Readers [%u]", m_lstReaders.GetSize() ), OnInitialize() )
+  LOG_INFO( FString( 0, "Release Running Stream Readers [%u]", m_lstReaders.GetSize() ), OnFinalize() )
+  
+  FMutexCtrl  _mtxCtrl( m_mtxReaders );
+  
   while ( m_lstReaders.IsEmpty() == FALSE )
   {
     RecdStreamReader* _pStreamReader = m_lstReaders.PopHead();
@@ -83,6 +88,8 @@ VOID	RecdReaderCollector::OnFinalize()
 
 RecdStreamReader& 	RecdReaderCollector::GetStreamReader( const FString& sCamera )
 {
+  FMutexCtrl  _mtxCtrl( m_mtxReaders );
+
   FTList< RecdStreamReader* >::Iterator _iter = m_lstReaders.Begin();
   
   while ( _iter == TRUE )
@@ -103,17 +110,86 @@ RecdStreamReader& 	RecdReaderCollector::GetStreamReader( const FString& sCamera 
 
 BOOL	RecdReaderCollector::SetReading( BOOL bEnable )
 {
+  FMutexCtrl  _mtxCtrl( m_mtxReaders );
+
   FTList< RecdStreamReader* >::Iterator _iter = m_lstReaders.Begin();
   
   while ( _iter == TRUE )
   {
     RecdStreamReader* _pStreamReader = *_iter;
     
-    _pStreamReader->SetReading( bEnable );
+    _pStreamReader->SetStatus( bEnable?(RecdStreamReader::eRSOpenStream):(RecdStreamReader::eRSFlushing) );
     
     _iter++;
   }
+
+  m_bEnabled = bEnable;
   
   return TRUE;
 }
 
+BOOL	RecdReaderCollector::GetBuffers( RecdStreamReader::ReaderStatus eStatus, DOUBLE* pdPercentage ) const
+{
+  FMutexCtrl  _mtxCtrl( m_mtxReaders );
+
+  FTList< RecdStreamReader* >::Iterator _iter = m_lstReaders.Begin();
+  
+  DOUBLE _dPercentage = 100.0;
+  
+  while ( _iter == TRUE )
+  {
+    RecdStreamReader* _pStreamReader = *_iter;
+    
+    DOUBLE dElapsed = 0.0;
+    DOUBLE dTotal   = 0.0;
+    RecdStreamReader::ReaderStatus _eStatus = _pStreamReader->GetStatus( &dElapsed, &dTotal );
+    if (
+        ( _eStatus == RecdStreamReader::eRSBuffering ) || 
+        ( _eStatus == RecdStreamReader::eRSFlushing  )
+       )
+    {
+      DOUBLE _dTmp = (dElapsed / dTotal) * 100;
+      
+      if ( _dTmp < _dPercentage )
+	_dPercentage = _dTmp;
+    }
+    _iter++;
+  }
+
+  if ( pdPercentage != NULL )
+    *pdPercentage = _dPercentage; 
+
+  if ( eStatus == RecdStreamReader::eRSBuffering )
+    return CheckStatus( RecdStreamReader::eRSReading );
+  
+  if ( eStatus == RecdStreamReader::eRSFlushing  )
+    return CheckStatus( RecdStreamReader::eRSWaiting );
+  
+  return FALSE;
+}
+
+BOOL	RecdReaderCollector::CheckStatus( RecdStreamReader::ReaderStatus eStatus ) const
+{
+  FMutexCtrl  _mtxCtrl( m_mtxReaders );
+
+  FTList< RecdStreamReader* >::Iterator _iter = m_lstReaders.Begin();
+  
+  while ( _iter == TRUE )
+  {
+    RecdStreamReader* _pStreamReader = *_iter;
+    
+    if ( _pStreamReader->GetStatus( NULL, NULL ) != eStatus ) 
+      return FALSE;
+    
+    _iter++;
+  }
+
+  return TRUE;
+}
+
+BOOL	RecdReaderCollector::IsEnabled() const
+{ 
+  FMutexCtrl  _mtxCtrl( m_mtxReaders );
+  
+  return m_bEnabled;
+}

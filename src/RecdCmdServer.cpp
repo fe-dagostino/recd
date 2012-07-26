@@ -34,6 +34,9 @@
 #include "COMMANDS/RecdGetVersion.h"
 #include "COMMANDS/RecdStartRecording.h"
 #include "COMMANDS/RecdStopRecording.h"
+#include "COMMANDS/RecdStartHighLights.h"
+#include "COMMANDS/RecdGetDiskSize.h"
+#include "COMMANDS/RecdGetBuffers.h"
 #include "COMMANDS/RecdEstimateTime.h"
 
 
@@ -59,9 +62,12 @@ BOOL RecdCmdServer::Initialize()
   m_rciServer.GetCommandCollector().Register( new RecdList      ( m_rciServer )    );
   m_rciServer.GetCommandCollector().Register( new RecdHelp      ( m_rciServer )    );
   m_rciServer.GetCommandCollector().Register( new RecdGetVersion( m_rService  )    );
+  m_rciServer.GetCommandCollector().Register( new RecdGetDiskSize()                );
+  m_rciServer.GetCommandCollector().Register( new RecdGetBuffers()                 );
+  m_rciServer.GetCommandCollector().Register( new RecdEstimateTime()               );
   m_rciServer.GetCommandCollector().Register( new RecdStartRecording()             );
   m_rciServer.GetCommandCollector().Register( new RecdStopRecording()              );
-  m_rciServer.GetCommandCollector().Register( new RecdEstimateTime()               );
+  m_rciServer.GetCommandCollector().Register( new RecdStartHighLights()            );
     
   IConnectionFactory*  _pIConnectionFactory	= new FTcpConnectionFactory();
   if ( _pIConnectionFactory == NULL )

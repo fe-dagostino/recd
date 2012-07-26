@@ -21,6 +21,7 @@
 #include "RecdEvents.h"
 #include "Recd.h"
 
+#include "avapplication.h"
 #include "RecdReaderCollector.h"
 #include "RecdEncoderCollector.h"
 
@@ -63,6 +64,10 @@ ENTER( OnStart() )
   FCATCH( FException, ex )
   {
     TRACE_EXCEPTION_CATCH( ex, OnStart() )
+    
+    printf( (const char*)ex.GetMessage() );
+    printf( "\r\n" );
+    
     exit(0);
   }
 
@@ -127,6 +132,9 @@ ENTER( OnStart() )
 
   }
 
+  // Initialize LIB AV CPP
+  CAVApplication::initLibAVCPP();
+
   // Initialize IP Camera Readers
   LOG_INFO( "Initialize IP Camera Readers", OnStart() )
   RecdReaderCollector::Initialize();
@@ -148,7 +156,7 @@ ENTER( OnRun() )
     LOG_INFO( "Run ..", OnRun() )
 
     // Wait for number of seconds in configuration
-    FThread::Sleep( 500 );
+    FThread::Sleep( 10000 );
   }//while ( !m_bExit )
 
 EXIT
@@ -165,6 +173,9 @@ ENTER( OnStop() )
   // Finalize IP Camera Readers
   LOG_INFO( "Finalize IP Camera Readers", OnStop() )
   RecdReaderCollector::GetInstance().Finalize();
+
+  // Deinitialize LIB AV CPP
+  CAVApplication::deinitLibAVCPP();
   
   //
   m_bExit = TRUE;

@@ -31,57 +31,91 @@ RecdHighLightsEncoder::RecdHighLightsEncoder(
 				    )
   : FLogThread( sHighLightsEncoderName, NULL, FThread::TP_CRITICAL, -1 ),
     m_bExit( FALSE ),
-    m_bRecording( FALSE ),
+    m_eEncoderStatus( eHSUndefined ),
     m_pAVEncoder( NULL ),
     m_rStreamReader( rStreamReader ),
     m_swHighLights( FALSE )
 {
   (GET_LOG_MAILBOX())->SetLogMessageFlags( GetLogMessageFlags()     );
   (GET_LOG_MAILBOX())->SetVerbosityFlags ( GetVerbosityLevelFlags() );
+  
+  m_pVideoItems = new FTQueue<RecdMbxItem* >();
+  if ( m_pVideoItems == NULL )
+  {
+    ERROR_INFO( "Not Enough Memory for allocating Queue", RecdStreamReader() )
+    //@todo
+  }
 }
 
 RecdHighLightsEncoder::~RecdHighLightsEncoder()
 {
-
+  if ( m_pVideoItems != NULL )
+  {
+    // Release mailbox.
+    delete m_pVideoItems;
+    m_pVideoItems = NULL;
+  }
 }
 
-VOID   RecdHighLightsEncoder::StartRecording( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw )
+VOID   RecdHighLightsEncoder::SetParameters( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw )
 {
-  FMutexCtrl _mtxCtrl( m_mtxRecording );
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
   
   m_sDestination = sDestination;
-  m_bRecording   = TRUE;
   m_bHighlights  = bHighlights;
   
   m_swHighLights.Invalidate();
 }
 
-VOID   RecdHighLightsEncoder::StopRecording()
+BOOL	RecdHighLightsEncoder::StartHighLight()
 {
-  BOOL _bWaitClose = FALSE;
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
   
-  m_mtxRecording.EnterMutex();
-    if ( m_pAVEncoder != NULL  )
-    {
-      _bWaitClose = TRUE;
-    }
-    m_bRecording   = FALSE;
-  m_mtxRecording.LeaveMutex();
-  
-  if ( _bWaitClose )
-  {
-    m_semStop.Wait();
-  }
-}
+  if ( m_bHighlights == FALSE )
+    return FALSE;
 
-BOOL	RecdHighLightsEncoder::StartHighLights()
-{
-  FMutexCtrl _mtxCtrl( m_mtxRecording );
-  
-  LOG_INFO( FString( 0, "BEGIN HighLights(%s)", (const char*)m_rStreamReader.GetCameraName() ), StartHighLights() )
-  m_swHighLights.Reset();
+  if ( GetStatus( NULL, NULL ) == eHSWaiting )
+  {
+    LOG_INFO( FString( 0, "BEGIN HighLight(%s)", (const char*)m_rStreamReader.GetCameraName() ), StartHighLights() )
+    m_rStreamReader.PushHighLightsItem( new RecdMbxItem( RecdMbxItem::eCmdStartEncoding ) );
+  }
+  else
+  {
+    LOG_INFO( FString( 0, "CONTINUE HighLight(%s)", (const char*)m_rStreamReader.GetCameraName() ), StartHighLights() )
+    m_swHighLights.Reset();
+  }
   
   return TRUE;
+}
+
+enum RecdHighLightsEncoder::HighLightsEncoderStatus RecdHighLightsEncoder::GetStatus( DOUBLE* pdElapsed, DOUBLE* pdTotal ) const
+{
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
+
+  if ( pdElapsed != NULL )
+  {
+    *pdElapsed = 0.0;
+    
+    *pdElapsed = m_swHighLights.Peek();
+    if ( *pdElapsed > m_dHighLightDuration )
+      *pdElapsed = m_dHighLightDuration;
+    
+    if ( pdTotal != NULL )
+    {
+      *pdTotal = m_dHighLightDuration;
+    }
+  }
+  
+  return m_eEncoderStatus;
+}
+
+bool                         RecdHighLightsEncoder::SetStatus( HighLightsEncoderStatus eStatus )
+{
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
+  
+  m_eEncoderStatus = eStatus;
+  
+  return true;
 }
 
 BOOL	RecdHighLightsEncoder::Initial()
@@ -96,88 +130,50 @@ BOOL	RecdHighLightsEncoder::Final()
   return TRUE;
 }
 
+
 VOID	RecdHighLightsEncoder::Run()
 {
-  double   _dFPS          = 0.03333;
-  double   _dTimeSpan     = 40.0;
-  CAVPoint _avRenderPos;
-  CAVRect  _avRenderRect;
-  CAVImage _avFrameYUV;
+  double     _dFPS              = 0.03333;
+  double     _dFpsError         = 0.0; 
+  DWORD      _dwEncoderMaxItems = RecdConfig::GetInstance().GetEncoderMaxItems( m_rStreamReader.GetCameraName(), NULL );
+  DWORD      _dwReadingTimeout  = RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
+  DWORD      _dwStandbyTimeout  = RecdConfig::GetInstance().GetEncoderStandByDelay( m_rStreamReader.GetCameraName(), NULL );
+  CAVPoint   _avRenderPos;
+  CAVRect    _avRenderRect;
+  CAVImage   _avFrameYUV;
+  
+  // Update status to waiting mode.
+  SetStatus( eHSWaiting );
   
   while ( !m_bExit )
   {
     FThread::YieldThread();
     
-    m_mtxRecording.EnterMutex();
-    
-    if ( 
-	  ( m_bRecording                               == FALSE ) && 
-	  ( m_rStreamReader.GetHighLightsMailboxSize() ==     0 )
-       )
-    {    
-      //Release mutex
-      m_mtxRecording.LeaveMutex();
-            
-      if ( m_pAVEncoder == NULL )
-      {
-	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
-	FThread::Sleep(
-			RecdConfig::GetInstance().GetEncoderStandByDelay( m_rStreamReader.GetCameraName(), NULL )
-		      );
-      }
-      else
-      {
-	m_sDestination.Empty();
-	m_swHighLights.Invalidate();
-	
-	LOG_INFO( "Close Encoder", Run() )
-	if ( m_pAVEncoder->close() != eAVSucceded )
-	{
-	  ERROR_INFO( "Failed to close encoder.", Run() )
-	}
-	
-	delete m_pAVEncoder;
-	m_pAVEncoder = NULL;
-	
-	// Signal termination
-	m_semStop.Post();
-	FThread::YieldThread();
-      }
-    }
-    else  
+    switch ( GetStatus( NULL, NULL ) )
     {
-      CAVFrame* _pFrame = m_rStreamReader.GetHighLightsFrame(
-			  RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL ),
-			  TRUE
-			);
-      if ( _pFrame ==  NULL ) 
+      case eHSWaiting:
       {
-	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
-	
-	//Release mutex
-	m_mtxRecording.LeaveMutex();
-	continue;
-      }
-      
-      if ( 
-	   ( m_pAVEncoder   == NULL   ) &&   // Encoder must be initialized 
-	   ( m_bHighlights  == TRUE   ) &&   // HighLights are enabled
-	   ( m_swHighLights.IsValid() )      // StopWatch must be valid
-	 )
-      {
-	// If the encoder is closed and we got a sample frame we will skip it
-	// untile the first video frame will be readed.
-	if ( _pFrame->getImage() == NULL )
-	{	  
-	  // Release memory.
-	  m_rStreamReader.ReleaseFrame( _pFrame );
+	RecdMbxItem* _pMbxItem = m_rStreamReader.PopHighLightsItem( _dwReadingTimeout, TRUE );	
+	if ( _pMbxItem != NULL )
+	{
+	  if ( _pMbxItem->GetType() == RecdMbxItem::eCommandItem ) 
+	  {
+	    if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStartEncoding )
+	      SetStatus( eHSOpenStream );
+	  }
 
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  // Release memory.
+	  m_rStreamReader.ReleaseMbxItem( _pMbxItem );
 	}
-	
-	
+	else
+	{
+	  VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
+	  FThread::Sleep( _dwStandbyTimeout );
+	}
+      }; break;
+      
+      case eHSOpenStream:
+      {
 	FString _sCameraName  = m_rStreamReader.GetCameraName();
 	
 	FString _sOutFilename( 0, "%s/HL_%s_%010d.mp4", (const char*)m_sDestination, (const char*)_sCameraName, time(NULL) ); 
@@ -186,12 +182,7 @@ VOID	RecdHighLightsEncoder::Run()
 	if ( m_pAVEncoder == NULL )
 	{
 	  ERROR_INFO( "Not Enough Memory for allocating CAVEncoder()", Run() )
-	  
-	  // Release memory.
-	  m_rStreamReader.ReleaseFrame( _pFrame );
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  break;
 	}
 	
 	// With and Height for the final video
@@ -230,13 +221,11 @@ VOID	RecdHighLightsEncoder::Run()
 	}
 	
 	// If we have no skin! highlights rendering will be impossible
-	if ( ( _iWidth == -1 ) && (_iHeight == -1 ) )
+	if ( ( _iWidth == -1 ) || (_iHeight == -1 ) )
 	{
-	  ERROR_INFO( "HIGHLIGHTS Width and Height NOT DEFINED! CHECK YOUR CONFIGURATION", Run() )
+	  ERROR_INFO( "HIGHLIGHTS Width and/or Height NOT DEFINED! CHECK YOUR CONFIGURATION", Run() )
 
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  break;
 	}
 	
 	LOG_INFO( FString( 0, "CAM=[%s] OUT=[%s]", (const char*)_sCameraName, (const char*)_sOutFilename ), Run() )
@@ -248,81 +237,192 @@ VOID	RecdHighLightsEncoder::Run()
 			      RecdConfig::GetInstance().GetHighLightsEncoderFps       ( _sCameraName, NULL ),
 			      RecdConfig::GetInstance().GetHighLightsEncoderGoP       ( _sCameraName, NULL ),
 			      RecdConfig::GetInstance().GetHighLightsEncoderBitRate   ( _sCameraName, NULL ),
-			      (CodecID)RecdConfig::GetInstance().GetHighLightsEncoderVideoCodec( _sCameraName, NULL )
+			      (CodecID)RecdConfig::GetInstance().GetHighLightsEncoderVideoCodec( _sCameraName, NULL ),
+			      RecdConfig::GetInstance().GetHighLightsEncoderVideoCodecProfile( _sCameraName, NULL )
 			  );
 	if ( _avRes != eAVSucceded )
 	{
 	  ERROR_INFO( FString( 0, "Failed to Open Encoder [%s]", (const char*)_sOutFilename ), Run() )
 	  
-	  delete m_pAVEncoder;
-	  m_pAVEncoder = NULL;
-	  
-	  // Release memory.
-	  m_rStreamReader.ReleaseFrame( _pFrame );
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  SetStatus( eHSReleasing );
+	  break;
 	}
 	
-	_dFPS          = 1.0 / (double)RecdConfig::GetInstance().GetHighLightsEncoderFps( _sCameraName, NULL );
-	_dTimeSpan     = RecdConfig::GetInstance().GetHighLightsTimeSpan( _sCameraName, NULL );
-      } //if ( _pAVEncoder == NULL )
-      
-      m_swFPS.Reset();
-      
-      if ( m_pAVEncoder != NULL )
-      {
-	AVResult eResult;
-	
-	// If background is valid alpha blending is required.
-	if ( m_rgbaBkg.isValid() && ( _pFrame->getMediaType() == AVMEDIA_TYPE_VIDEO ) )
-	{
-	  // In this case _pFrame is an RGB image
-	  m_rgbaBkg.blend( _avRenderPos, *_pFrame->getImage() );
-	  
-	  // initialize autput frame.
-	  _avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
-	  
-	  eResult = m_pAVEncoder->write( &_avFrameYUV, 0 );
-	}
-	else
-	  eResult = m_pAVEncoder->write( _pFrame, AV_INTERLEAVED_AUDIO_WR );
-	
-	if (  eResult != eAVSucceded )
-	{
-	    ERROR_INFO( "Failed to encode frame.", Run() )
-	    
-	    delete m_pAVEncoder;
-	    m_pAVEncoder = NULL;
-	}
-	
-	// Check if recording time is greater or equal to GetHighLightsTimeSpan()
-	if ( m_swHighLights.Peek() >= _dTimeSpan )
-	{
-	  LOG_INFO( FString( 0, "END HighLights(%s)", (const char*)m_rStreamReader.GetCameraName() ), Run() )
+	_dFPS                 = 1.0 / (double)RecdConfig::GetInstance().GetHighLightsEncoderFps( _sCameraName, NULL );
+	_dFpsError            = 0.0;
+	m_dHighLightDuration  = RecdConfig::GetInstance().GetHighLightsTimeSpan( _sCameraName, NULL );
 
-	  m_swHighLights.Invalidate();
+	// Invalidate fps stop watch
+	m_swFPS.Invalidate();
+
+	// Reset stop watch in order to recovery time lost opening the encoder.
+	m_mtxEncoder.EnterMutex();
+	 m_swHighLights.Reset();
+	m_mtxEncoder.LeaveMutex();
+	
+	// Update status to encoding
+	SetStatus( eHSEncoding );
+      }; break;
+      
+      case eHSEncoding:
+      {
+	RecdMbxItem* _pMbxItem = NULL;
+	
+	_dwReadingTimeout = (_dFpsError>=_dFPS)?1:RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
+	
+	_pMbxItem = m_rStreamReader.PopHighLightsItem( _dwReadingTimeout, TRUE );
+	if ( _pMbxItem == NULL )   
+	{
+	  if ( m_pVideoItems->IsEmpty() )
+	  {
+	    VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
+	    continue;
+	  }
+	  else
+	  {
+	    _pMbxItem = m_pVideoItems->Pop( false );
+	  }
+	}
+
+
+	switch ( _pMbxItem->GetType() )
+	{
+	  case RecdMbxItem::eCommandItem:
+	  {
+	    if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStopEncoding )
+	    {
+	      SetStatus( eHSReleasing );
+	    }
+	  }; break;
 	  
+	  case RecdMbxItem::eImageItem:
+	  {
+	    // It is necessary to check if queue is empty in order to 
+	    // avoid FTQueue exception raising.
+	    // Checking that current frame is a new frame and do not
+	    // match with first element in queue.
+	    if (
+	        ( m_pVideoItems->IsEmpty()                 ) ||
+		( _pMbxItem != m_pVideoItems->Pop( FALSE ) )
+	       )
+	    {
+	      m_pVideoItems->Push( _pMbxItem );
+	    }
+	    
+	    // Just in case enqueued frames is bigger than max
+	    // we will drop the older frame and then the one 
+	    // after will be processed.
+	    if ( m_pVideoItems->GetSize() > _dwEncoderMaxItems )
+	    {
+	      _pMbxItem = m_pVideoItems->Pop();
+	      
+	      // Release frame.
+	      m_rStreamReader.ReleaseMbxItem( _pMbxItem );
+	      
+	      VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", Run() )
+	    }
+	    
+	    if (
+		( m_swFPS.IsValid() == FALSE ) ||
+		( m_swFPS.Peek()    >= _dFPS ) 
+	      )
+	    {
+	      // Cumulative error
+	      _dFpsError += m_swFPS.Peek() - _dFPS;
+	      
+	      m_swFPS.Reset();
+	      
+	      _pMbxItem = m_pVideoItems->Pop();
+	    }
+	    else if ( _dFpsError >= _dFPS )
+	    {
+	      _dFpsError -= _dFPS;
+	      
+	      _pMbxItem = m_pVideoItems->Pop();
+	    }  
+	    else // move to next loop
+	    {
+	      continue;
+	    }
+	    
+	    AVResult eResult;
+	  
+	    // If background is valid alpha blending is required.
+	    if ( m_rgbaBkg.isValid() )
+	    {
+	      // In this case _pFrame is an RGB image
+	      m_rgbaBkg.blend( _avRenderPos, *_pMbxItem->GetImage() );
+	      
+	      // initialize autput frame.
+	      _avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
+	      
+	      eResult = m_pAVEncoder->write( &_avFrameYUV, 0 );
+	    }
+	    else
+	    {
+	      eResult = m_pAVEncoder->write( _pMbxItem->GetImage(), AV_INTERLEAVED_VIDEO_WR );
+	    }
+
+	    if (  eResult != eAVSucceded )
+	    {
+		ERROR_INFO( "Failed to encode frame.", Run() )
+		
+		SetStatus( eHSReleasing );
+		break;
+	    }
+	  
+	    // Check if recording time is greater or equal to GetHighLightsTimeSpan()
+	    if ( m_swHighLights.Peek() >= m_dHighLightDuration )
+	    {
+	      LOG_INFO( FString( 0, "END HighLights(%s)", (const char*)m_rStreamReader.GetCameraName() ), Run() )
+
+	      SetStatus( eHSReleasing );
+	    }
+	
+	  }; break;
+	  
+	  case RecdMbxItem::eSampleItem:
+	  {
+	    // nothing to do
+	  }; break;
+	    
+	} //switch ( _pMbxItem->GetType() )
+	
+	// Each item must be released.
+	m_rStreamReader.ReleaseMbxItem( _pMbxItem );
+	
+      }; break;
+      
+      case eHSReleasing:
+      {
+	// Cleaning local queue
+	RecdMbxItem* _pMbxItem = NULL;
+	
+	while ( !m_pVideoItems->IsEmpty() )
+	{
+	  _pMbxItem = m_pVideoItems->Pop();
+	  
+	  // Each item must be released.
+	  m_rStreamReader.ReleaseMbxItem( _pMbxItem );
+	}
+	
+	LOG_INFO( "Close and Release CAVEncoder instance", Run() )
+
+	if ( m_pAVEncoder != NULL )
+	{
 	  if ( m_pAVEncoder->close() != eAVSucceded )
 	  {
 	    ERROR_INFO( "Failed to close encoder.", Run() )
 	  }
-	
+	  
 	  delete m_pAVEncoder;
 	  m_pAVEncoder = NULL;
 	}
-      }//if ( m_bRaw == TRUE )
-
-      
-      // Release memory.
-      m_rStreamReader.ReleaseFrame( _pFrame );
-      //Release mutex
-      m_mtxRecording.LeaveMutex();
-      
-      while ( m_swFPS.Peek() < _dFPS )
-	FThread::YieldThread();
-      
-    }// if ( m_bRecording == FALSE )
+	
+	// Move to initial state  
+	SetStatus( eHSWaiting );
+      }; break;
+    } // switch ( GetStatus() )
   }// while ( !m_bExit )
 }
 

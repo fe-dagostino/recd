@@ -24,6 +24,7 @@
 #include "LOGGING/FLogThread.h"
 #include "RecdStreamReader.h"
 #include "avencoder.h"
+#include "avimage.h"
 
 USING_NAMESPACE_FED
 USING_NAMESPACE_LOGGING
@@ -37,6 +38,19 @@ class RecdStreamEncoder : public FLogThread
 {
   ENABLE_FRTTI( RecdStreamEncoder )
 public:
+  
+  /**
+   * Stream Encoder Status status enumeration.
+   */
+  enum StreamEncoderStatus
+  {
+    eSEUndefined,    // Initial status no action required.
+    eSEWaiting,      // Reader stay in waiting mode so input streaming is closed
+    eSEOpenStream,   // 
+    eSEEncoding,
+    eSEReleasing
+  };
+    
   /**
    * 
    */
@@ -52,33 +66,45 @@ public:
   /**
    * Read/Dequeue first frame.
    * @param bRemove  specify if the item must be removed ot not.
-   * Return a pointer to an instance of CAVImage, it bRemove was TRUE
+   * Return a pointer to an instance of CAVFrame, it bRemove was TRUE
    * returned value must be release with a call to ReleaseFrame.
    */
-   CAVImage* 	 	GetRenderFrame( DWORD dwTimeout, BOOL bRemove );
-   /**
-    * Return rendering starting point.
-    */
-   CAVPoint             GetRenderPoint() const;
-   /**
-    * Return render bounding rect.
-    */
-   CAVRect              GetRenderRect() const;
-   /**
-    * Release specified pointer.
-    */
-   VOID 	 	ReleaseRenderFrame( CAVImage*& pImage );
-  
+  RecdMbxItem*             PopRenderMbxItem( DWORD dwTimeout, BOOL bRemove );
+  /***/
+  BOOL                     PushRenderMbxItem( RecdMbxItem* pMbxItem );
+  /**
+   * Return rendering starting point.
+   */
+  CAVPoint                 GetRenderPoint() const;
+  /**
+   * Return render bounding rect in relative coordinate system.
+   */
+  CAVRect                  GetRenderRect() const;
+  /**
+   * Return render key color.
+   */
+  CAVColor                 GetRenderColor() const;
+
+  /**
+   * Release specified pointer.
+   */
+  VOID                     ReleaseMbxItem( RecdMbxItem*& pMbxItem );
   
   /**
-   *  Activate recording on stream reader. 
+   *  Updating recording parameters. 
    */
-  VOID			StartRecording( const FString& sDestination );
-  /**
-   *  Deactivate recording on stream reader. 
-   */
-  VOID			StopRecording();
+  VOID			   SetParameters( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw );
     
+  /***/
+  const RecdStreamReader&  GetStreamReader() const
+  { return m_rStreamReader; }
+ 
+  /***/
+  enum StreamEncoderStatus GetStatus( ) const;
+  
+private:  
+  /***/
+  bool                     SetStatus( StreamEncoderStatus eStatus );
   
 // Implements virtual method defined in FThread  
 protected:
@@ -99,15 +125,19 @@ private:
   DWORD   	GetVerbosityLevelFlags() const;
   
 private:
-  BOOL                    m_bExit;
-  FMutex                  m_mtxRecording;  
-  BOOL                    m_bRecording;
-  CAVEncoder*             m_pAVEncoder;
-  FSemaphore              m_semStop;
-  FString                 m_sDestination;
-  RecdStreamReader&       m_rStreamReader;
-  FTMailbox<CAVImage* >*  m_pMbxFrames;
-  FStopWatch              m_swFPS;
+  BOOL                       m_bExit;
+  mutable FMutex             m_mtxEncoder;
+  StreamEncoderStatus        m_eEncoderStatus;  
+  CAVEncoder*                m_pAVEncoder;
+  FString                    m_sDestination;
+  RecdStreamReader&          m_rStreamReader;
+  FTMailbox<RecdMbxItem* >*  m_pMbxItems;
+  FTQueue<RecdMbxItem* >*    m_pVideoItems;
+  FStopWatch                 m_swFPS;
+  BOOL                       m_bRender;
+  BOOL                       m_bHighlights; 
+  BOOL                       m_bRaw;
+  CAVImage                   m_rgbaBkg;
 };
 
 #endif // RECDSTREAMENCODER_H

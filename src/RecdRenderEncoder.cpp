@@ -25,14 +25,15 @@
 #include "LOGGING/FLogger.h"
 
 
-
-
 class RenderThreads : public FThread
 {
 public:
+  
+  /***/
   RenderThreads( RecdRenderEncoder* pRenderEncoder, RecdStreamEncoder* pStreamEncoder )
     : FThread( NULL, FThread::TP_CRITICAL, -1 ),
       m_bExit( FALSE ),
+      m_eStatus( eRTUndefined ),
       m_bGotFrame( FALSE ),
       m_pRenderEncoder( pRenderEncoder ),
       m_pStreamEncoder( pStreamEncoder )
@@ -50,7 +51,18 @@ public:
   
   VOID    Reset()
   {
+    m_swFPS.Invalidate();
     m_bGotFrame = FALSE;
+  }
+  
+  inline enum RenderThreadStatus  GetStatus() const
+  {
+    return m_eStatus;
+  }
+  
+  inline VOID  SetStatus( enum RenderThreadStatus eStatus )
+  {
+    m_eStatus = eStatus;
   }
   
 protected:
@@ -68,41 +80,161 @@ protected:
 
   VOID	Run()
   {
+    DOUBLE     _dFPS                   =  1.0 / (double)RecdConfig::GetInstance().GetRenderFps( NULL );
+    DWORD      _dwRenderReadingTimeout = RecdConfig::GetInstance().GetRenderReadingTimeout( NULL );
+    DWORD      _dwStandbyTimeout       = RecdConfig::GetInstance().GetRenderStandByDelay( NULL );
+    
+    SetStatus( eRTWaiting );
+    
     while ( !m_bExit )
     {
-      CAVFrame*   _pFrame = m_pStreamEncoder->GetRenderFrame( 
-                                                              RecdConfig::GetInstance().GetRenderReadingTimeout( NULL ),
-                                                              TRUE
-                                                            );
-      if ( _pFrame != NULL )
+      FThread::YieldThread();
+      
+      switch( GetStatus() )
       {
-	m_bGotFrame = TRUE;
-	
-	if ( _pFrame->getImage() != NULL )
+	case eRTWaiting:
 	{
-	  m_pRenderEncoder->Blend( 
-				    m_pStreamEncoder->GetRenderPoint(),
-				    *_pFrame->getImage(),
-				    m_pStreamEncoder->GetRenderColor()
-				);
-	}			       
-			       
-	m_pStreamEncoder->ReleaseRenderFrame( _pFrame );
-      }
-      else
-      {
-	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
+	  RecdMbxItem*   _pMbxItem = m_pStreamEncoder->PopRenderMbxItem( _dwRenderReadingTimeout, TRUE );
+
+	  if ( _pMbxItem != NULL )
+	  {
+	    if ( _pMbxItem->GetType() == RecdMbxItem::eCommandItem ) 
+	    {
+	      if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStartEncoding )
+	      {
+		SetStatus( eRTOpenStream );
+	      }
+	    }
+	    
+	    // Release memory.
+	    m_pStreamEncoder->ReleaseMbxItem( _pMbxItem );
+	  }
+	  else
+	  {
+	    VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
+	    FThread::Sleep( _dwStandbyTimeout );
+	  }
+	}; break;
 	
-	FThread::YieldThread();	
-      }
+	case eRTOpenStream:
+	{
+	  //Wait until encoder will be opened or release command will be received.
+	  RecdMbxItem*   _pMbxItem = m_pStreamEncoder->PopRenderMbxItem( _dwRenderReadingTimeout, TRUE );
+	  if ( _pMbxItem != NULL )
+	  {
+	    if ( _pMbxItem->GetType() == RecdMbxItem::eCommandItem ) 
+	    {
+	      if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStartRendering )
+	      {
+		SetStatus( eRTRendering );
+	      }
+	      
+	      if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStopEncoding   )
+	      {
+		SetStatus( eRTReleasing );
+	      }
+	    }
+	    
+	    // Release memory.
+	    m_pStreamEncoder->ReleaseMbxItem( _pMbxItem );
+	  }
+	  else
+	  {
+	    VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Waiting Render Encoder", Run() )
+	    FThread::Sleep( _dwStandbyTimeout );
+	  }
+	  
+	}; break;
+	
+	case eRTRendering:
+	{
+	  RecdMbxItem*   _pMbxItem = m_pStreamEncoder->PopRenderMbxItem( _dwRenderReadingTimeout, TRUE );
+      
+	  if ( _pMbxItem == NULL )
+	  {
+	    VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Timeout occurs reading from mailbox", Run() )
+	    break;
+	  }
+
+	  switch ( _pMbxItem->GetType() )
+	  {
+	    case  RecdMbxItem::eCommandItem:
+	    {
+	      if (
+		  ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStopRendering ) ||
+		  ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStopEncoding  )
+		 )
+	      {
+		SetStatus( eRTReleasing );
+	      }
+	    };break;
+	    
+	    case  RecdMbxItem::eImageItem:
+	    {
+	      
+	      if (
+		    ( m_swFPS.IsValid()  == FALSE ) ||
+		    ( m_swFPS.Peek()     >= _dFPS )
+		  )
+	      {
+		m_swFPS.Reset();
+	      }
+	      else // Skip frame
+	      {
+		VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Skip frame ..", Run() )
+		break;
+	      } 
+	  
+	      m_bGotFrame = TRUE;
+	      
+	      m_pRenderEncoder->Blend( 
+					m_pStreamEncoder->GetRenderPoint(),
+					*_pMbxItem->GetImage(),
+					m_pStreamEncoder->GetRenderColor()
+				    );
+	      
+	    }; break;
+	  }//switch ( _pMbxItem->GetType() )
+	
+	  m_pStreamEncoder->ReleaseMbxItem( _pMbxItem );
+ 
+	}; break;
+	
+	case eRTReleasing:
+	{
+	  //Wait until encoder will be opened or release command will be received.
+	  RecdMbxItem*   _pMbxItem = m_pStreamEncoder->PopRenderMbxItem( _dwRenderReadingTimeout, TRUE );
+	  if ( _pMbxItem != NULL )
+	  {
+	    if ( _pMbxItem->GetType() == RecdMbxItem::eCommandItem ) 
+	    {
+	      if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStopRendering   )
+	      {
+		SetStatus( eRTWaiting );
+	      }
+	    }
+	    
+	    // Release memory.
+	    m_pStreamEncoder->ReleaseMbxItem( _pMbxItem );
+	  }
+	  else
+	  {
+	    VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Waiting 'Stop Rendering' from Render Encoder", Run() )
+	    FThread::Sleep( _dwStandbyTimeout );
+	  }
+	}; break;
+      }// switch( GetStatus() )
+
     }//while ( !m_bExit )
   }
 
 private:
-  BOOL               m_bExit;
-  BOOL               m_bGotFrame;
-  RecdRenderEncoder* m_pRenderEncoder;
-  RecdStreamEncoder* m_pStreamEncoder;
+  BOOL                        m_bExit;
+  RenderThreadStatus volatile m_eStatus;
+  BOOL volatile               m_bGotFrame;
+  FStopWatch                  m_swFPS;
+  RecdRenderEncoder*          m_pRenderEncoder;
+  RecdStreamEncoder*          m_pStreamEncoder;
 };
 
   
@@ -115,7 +247,7 @@ GENERATE_CLASSINFO( RecdRenderEncoder, FLogThread )
 RecdRenderEncoder::RecdRenderEncoder( const FString& sRenderEncoderName )
   : FLogThread( sRenderEncoderName, NULL, FThread::TP_CRITICAL, -1 ),
     m_bExit( FALSE ),
-    m_bRecording( FALSE ),
+    m_eEncoderStatus( eREUndefined ),
     m_pAVEncoder( NULL )
 {
   (GET_LOG_MAILBOX())->SetLogMessageFlags( GetLogMessageFlags()     );
@@ -155,9 +287,9 @@ RecdRenderEncoder::~RecdRenderEncoder()
   
 }
 
-VOID   RecdRenderEncoder::StartRecording( const FString& sDestination )
+VOID   RecdRenderEncoder::SetParameters( const FString& sDestination )
 {
-  FMutexCtrl _mtxCtrl( m_mtxRecording );
+  FMutexCtrl _mtxCtrl( m_mtxEncoder );
 
   for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
   {
@@ -165,27 +297,25 @@ VOID   RecdRenderEncoder::StartRecording( const FString& sDestination )
   }
   
   m_sDestination = sDestination;
-  m_bRecording   = TRUE;
+  
+  SetStatus( eREOpenStream );
 }
 
-VOID   RecdRenderEncoder::StopRecording()
+enum RecdRenderEncoder::RenderEncoderStatus RecdRenderEncoder::GetStatus() const
 {
-  BOOL _bWaitClose = FALSE;
+  FMutexCtrl mtxCtrl( m_mtxEncoder );
   
-  m_mtxRecording.EnterMutex();
-    if ( m_pAVEncoder != NULL  )
-    {
-      _bWaitClose = TRUE;
-    }
-    m_bRecording   = FALSE;
-  m_mtxRecording.LeaveMutex();
-  
-  if ( _bWaitClose )
-  {
-    m_semStop.Wait();
-  }
+  return m_eEncoderStatus;
 }
 
+bool RecdRenderEncoder::SetStatus( RenderEncoderStatus eStatus )
+{
+  FMutexCtrl mtxCtrl( m_mtxEncoder );
+  
+  m_eEncoderStatus = eStatus;
+  
+  return TRUE;
+}
 
 BOOL	RecdRenderEncoder::Initial()
 { 
@@ -201,48 +331,37 @@ BOOL	RecdRenderEncoder::Final()
 
 VOID	RecdRenderEncoder::Run()
 {
-  CAVImage    _avFrameYUV; 
-  double      _dFPS = 0.03333;
+  CAVImage   _avFrameYUV; 
+  double     _dFPS             = 0.03333;
+  double     _dFpsError        = 0.0;
+  DWORD      _dwStandbyTimeout = RecdConfig::GetInstance().GetRenderStandByDelay( NULL );
+
+  // Update status to waiting mode.
+  SetStatus( eREWaiting );
   
   while ( !m_bExit )
   {
     FThread::YieldThread();
     
-    m_mtxRecording.EnterMutex();
-    
-    if ( m_bRecording == FALSE )
+    switch( GetStatus() )
     {
-      //Release mutex
-      m_mtxRecording.LeaveMutex();
-      
-      if ( m_pAVEncoder == NULL )
+      case eREWaiting:
       {
-	VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
-	FThread::Sleep(
-			RecdConfig::GetInstance().GetRenderStandByDelay( NULL )
-		      );
-      }
-      else
-      {
-	m_sDestination.Empty();
+	BOOL bMoveForward = TRUE;
 	
-	LOG_INFO( "Close Encoder", Run() )
-	if ( m_pAVEncoder->close() != eAVSucceded )
+	// if at least one thread didn't got jet the first frame, rendering
+	// will be suspended.
+	if ( CheckStatus( eRTOpenStream ) )
 	{
-	  ERROR_INFO( "Failed to close encoder.", Run() )
+	  SetStatus( eREOpenStream );
 	}
-	
-	delete m_pAVEncoder;
-	m_pAVEncoder = NULL;
-	
-	// Signal termination
-	m_semStop.Post();
-	FThread::YieldThread();	
-      }
-    }//if ( m_bRecording == FALSE )
-    else  
-    { 
-      if ( m_pAVEncoder == NULL )
+	else
+	{
+	  VERBOSE_INFO( FLogMessage::VL_HIGH_PERIODIC_MESSAGE, "Recording Disabled ", Run() )
+	  FThread::Sleep( _dwStandbyTimeout );
+	}
+      }; break;
+      case eREOpenStream:
       {
 	FString _sOutFilename( 0, "%s/RENDER_%010d.mp4", (const char*)m_sDestination, time(NULL) ); 
 	
@@ -255,10 +374,9 @@ VOID	RecdRenderEncoder::Run()
 	if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
 	{
 	  ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgFilename ), Run() )
-	  
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	
+	  SetStatus( eREReleasing );
+	  break;
 	}
 	
 	if (_iWidth  == -1 )
@@ -272,9 +390,8 @@ VOID	RecdRenderEncoder::Run()
 	{
 	  ERROR_INFO( FString( 0, "Failed to LOAD Background [%s] CHECK YOUR CONFIGURATION", (const char*)sBkgMaskFilename ), Run() )
 
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  SetStatus( eREReleasing );
+	  break;
 	}
 	
 	// Initialize background mask with background image.
@@ -291,9 +408,8 @@ VOID	RecdRenderEncoder::Run()
 	{
 	  ERROR_INFO( "Not Enough Memory for allocating CAVEncoder()", Run() )
 
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  SetStatus( eREReleasing );
+	  break;
 	}
 
 	LOG_INFO( FString( 0, "RENDERING OUT=[%s]", (const char*)_sOutFilename ), Run() )
@@ -305,52 +421,109 @@ VOID	RecdRenderEncoder::Run()
 					    RecdConfig::GetInstance().GetRenderFps       ( NULL ),
 					    RecdConfig::GetInstance().GetRenderGoP       ( NULL ),
 					    RecdConfig::GetInstance().GetRenderBitRate   ( NULL ),
-					    (CodecID)RecdConfig::GetInstance().GetRenderVideoCodec( NULL )
+					    (CodecID)RecdConfig::GetInstance().GetRenderVideoCodec( NULL ),
+					    RecdConfig::GetInstance().GetRenderVideoCodecProfile( NULL )
 					);
 	if ( _avRes != eAVSucceded )
 	{
 	  ERROR_INFO( FString( 0, "Failed to Open Encoder [%s]", (const char*)_sOutFilename ), Run() )
 	  
-	  delete m_pAVEncoder;
-	  m_pAVEncoder = NULL;
-	  
-	  //Release mutex
-	  m_mtxRecording.LeaveMutex();
-	  continue;
+	  SetStatus( eREReleasing );
+	  break;
 	}
 	
-        _dFPS =  1.0 / (double)RecdConfig::GetInstance().GetRenderFps( NULL );
+        _dFPS      = 1.0 / (double)RecdConfig::GetInstance().GetRenderFps( NULL );
+	_dFpsError = 0.0;
+
+	// Send Start Rendering command to each rendering thread
+	PostCommand( RecdMbxItem::eCmdStartRendering );
+	
+	// Invalidate fps stop watch
+	m_swFPS.Invalidate();
+
+	// Move to next state
+	SetStatus( eREEncoding );
+      }; break;
+      
+      case eREEncoding:
+      {
+	if ( CheckStatus( eRTReleasing ) == TRUE )
+	{
+	  SetStatus( eREReleasing );
+	  break;
+	}
 	
 	// Wait until all reading channels will got a frame to be processed.
+	BOOL _bGotFrames = TRUE;
 	for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
 	{
-	  while ( !m_pRenderThreads[iRenderThread]->GotFrame() )
-	    FThread::Sleep(1);
+	  // if at least one thread didn't got jet the first frame, rendering
+	  // will be suspended.
+	  _bGotFrames &= m_pRenderThreads[iRenderThread]->GotFrame();
 	}
-      } //if ( _pAVEncoder == NULL )
-      
+	
+	if ( _bGotFrames == FALSE )
+	{
+	  // if at least one thread didn't got a frame we will force
+	  // termination of current segment of code.
+	  break;
+	}
+	
+	if (
+	    ( m_swFPS.IsValid() == FALSE ) ||
+	    ( m_swFPS.Peek()    >= _dFPS ) 
+	  )
+	{
+	  // Cumulative error
+	  _dFpsError += m_swFPS.Peek() - _dFPS;
+	  
+	  m_swFPS.Reset();
+	}
+	else if ( _dFpsError >= _dFPS )
+	{
+	  _dFpsError -= _dFPS;
+	}  
+	else // move to next loop
+	{
+	  continue;
+	}
 
-      m_swFPS.Reset();
+	// initialize autput frame.
+	_avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
 
-      // initialize autput frame.
-      _avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
-
-      CAVFrame  _avFrame( &_avFrameYUV ); 
-      if ( m_pAVEncoder->write( &_avFrame, 0 ) != eAVSucceded )
-      {
+	if ( m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR ) != eAVSucceded )
+	{
 	  ERROR_INFO( "Failed to encode frame.", Run() )
+	  
+	  SetStatus( eREReleasing );
+	  break;
+	}
+	
+      }; break;
+      
+      case eREReleasing:
+      {
+
+	if ( m_pAVEncoder != NULL )
+	{
+	  LOG_INFO( "Close Encoder", Run() )
+	  if ( m_pAVEncoder->close() != eAVSucceded )
+	  {
+	    ERROR_INFO( "Failed to close encoder.", Run() )
+	  }
 	  
 	  delete m_pAVEncoder;
 	  m_pAVEncoder = NULL;
-      }
-      _avFrame.detach();
-
-      //Release mutex
-      m_mtxRecording.LeaveMutex();
+	}
+	
+	PostCommand( RecdMbxItem::eCmdStopRendering );
+	
+	if ( CheckStatus( eRTWaiting ) == TRUE )
+	  SetStatus( eREWaiting );
+      }; break;
       
-      while ( m_swFPS.Peek() < _dFPS )
-	FThread::YieldThread();
-    }// else if ( m_bRecording == FALSE )
+    }//switch( GetStatus() )
+
   }// while ( !m_bExit )
 }
 
@@ -363,6 +536,41 @@ BOOL    RecdRenderEncoder::Blend( const CAVPoint& rPos, const CAVImage& rFrame, 
   }
 
   return TRUE;
+}
+
+BOOL    RecdRenderEncoder::CheckStatus( enum RenderThreadStatus eStatus )
+{
+  BOOL bRetVal = TRUE;
+  
+  // Monitor status for Render Thread Wait until all reading channels will got a frame to be processed.
+  for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+  {
+    // if at least one thread didn't got jet the first frame, rendering
+    // will be suspended.
+    if ( m_pRenderThreads[iRenderThread]->GetStatus() != eStatus )
+    {
+      bRetVal = FALSE;
+      break;
+    }
+  }
+  
+  return bRetVal;
+}
+
+VOID    RecdRenderEncoder::PostCommand( RecdMbxItem::MbxCommandType eCommand )
+{
+  FTList<RecdStreamEncoder* >::Iterator _iter = RecdEncoderCollector::GetInstance().GetRawEncoders()->Begin();
+  
+  while ( _iter )
+  {
+    RecdStreamEncoder* _pStreamEncoder = *_iter;
+    
+    _pStreamEncoder->PushRenderMbxItem( new RecdMbxItem( eCommand ) );
+    // move to next item in the list.
+    _iter++;
+  }
+  
+  FThread::YieldThread();
 }
 
 DWORD   RecdRenderEncoder::GetLogMessageFlags() const

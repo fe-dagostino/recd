@@ -41,14 +41,21 @@ VOID	RecdEncoderCollector::OnInitialize()
   LOG_INFO( FString( 0, "Configured [%d] Cameras", _pIpCameras->GetCount() ), OnInitialize() )
   for ( DWORD _dwItem = 0; _dwItem < _pIpCameras->GetCount(); _dwItem++ )
   {
-    FString _sEncoder( 0, "RecdStreamEncoder[%u]", _dwItem );
+    FString _sRawEncoder       ( 0, "RecdStreamEncoder[%u]", _dwItem );
+    FString _sHighLightsEncoder( 0, "RecdHighLightsEncoder[%u]", _dwItem );
     FString _sCamera = _pIpCameras->GetValue( _dwItem );
 
-    RecdStreamEncoder* _pStreamEncoder = NULL;
+    RecdStreamEncoder*     _pStreamEncoder         = NULL;
+    RecdHighLightsEncoder* _pRecdHighLightsEncoder = NULL;
     FTRY
     {
-      _pStreamEncoder = new RecdStreamEncoder( 
-						_sEncoder, 
+      _pStreamEncoder         = new RecdStreamEncoder( 
+						_sRawEncoder, 
+						RecdReaderCollector::GetInstance().GetStreamReader( _sCamera )
+					     );
+					     
+      _pRecdHighLightsEncoder = new RecdHighLightsEncoder( 
+						_sHighLightsEncoder, 
 						RecdReaderCollector::GetInstance().GetStreamReader( _sCamera )
 					     );
     }
@@ -60,13 +67,26 @@ VOID	RecdEncoderCollector::OnInitialize()
     if ( _pStreamEncoder != NULL )
     {
       LOG_INFO( FString( 0, "Allocated New Stream Encoder [%s] for Camera [%s]", 
-			 (const char*)_sEncoder, (const char*)_sCamera ), OnInitialize() )
+			 (const char*)_sRawEncoder, (const char*)_sCamera ), OnInitialize() )
       
       _pStreamEncoder->Start();
 
       LOG_INFO( FString( 0, "Keep pointer to Stream Encoder [%s]", 
-			 (const char*)_sEncoder ), OnInitialize() )
+			 (const char*)_sRawEncoder ), OnInitialize() )
       m_lstEncoders.PushTail( _pStreamEncoder );
+    }
+    
+    
+    if ( _pRecdHighLightsEncoder != NULL )
+    {
+      LOG_INFO( FString( 0, "Allocated New HighLights Encoder [%s] for Camera [%s]", 
+			 (const char*)_sHighLightsEncoder, (const char*)_sCamera ), OnInitialize() )
+      
+      _pRecdHighLightsEncoder->Start();
+
+      LOG_INFO( FString( 0, "Keep pointer to HighLights Encoder [%s]", 
+			 (const char*)_sHighLightsEncoder ), OnInitialize() )
+      m_lstHighLightsEncoders.PushTail( _pRecdHighLightsEncoder );
     }
   }
  
@@ -91,7 +111,7 @@ VOID	RecdEncoderCollector::OnInitialize()
 
 VOID	RecdEncoderCollector::OnFinalize()
 {
-  LOG_INFO( FString( 0, "Release Running Stream Encoders [%u]", m_lstEncoders.GetSize() ), OnInitialize() )
+  LOG_INFO( FString( 0, "Release Running Stream Encoders [%u]", m_lstEncoders.GetSize() ), OnFinalize() )
   while ( m_lstEncoders.IsEmpty() == FALSE )
   {
     RecdStreamEncoder* _pStreamEncoder = m_lstEncoders.PopHead();
@@ -99,6 +119,16 @@ VOID	RecdEncoderCollector::OnFinalize()
     _pStreamEncoder->Stop();
     
     delete _pStreamEncoder;
+  }
+  
+  LOG_INFO( FString( 0, "Release Running HighLights Encoders [%u]", m_lstHighLightsEncoders.GetSize() ), OnFinalize() )
+  while ( m_lstHighLightsEncoders.IsEmpty() == FALSE )
+  {
+    RecdHighLightsEncoder* _pRecdHighLightsEncoder = m_lstHighLightsEncoders.PopHead();
+    
+    _pRecdHighLightsEncoder->Stop();
+    
+    delete _pRecdHighLightsEncoder;
   }
   
   // Release Render Encoder instance
@@ -111,38 +141,84 @@ VOID	RecdEncoderCollector::OnFinalize()
 }
 
 
-BOOL	RecdEncoderCollector::StartRecording( const FString& sDestination  )
+BOOL	RecdEncoderCollector::SetParameters( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw )
 {
-  FTList< RecdStreamEncoder* >::Iterator _iter = m_lstEncoders.Begin();
-  
-  while ( _iter == TRUE )
+  if ( bRender == TRUE )
+    m_pRecdRenderEncoder->SetParameters( sDestination );
+
+  FTList< RecdStreamEncoder* >::Iterator _iterRaw = m_lstEncoders.Begin();
+  while ( _iterRaw == TRUE )
   {
-    RecdStreamEncoder* _pStreamEncoder = *_iter;
+    RecdStreamEncoder* _pStreamEncoder = *_iterRaw;
     
-    _pStreamEncoder->StartRecording( sDestination );
+    _pStreamEncoder->SetParameters( sDestination, bRender, bHighlights, bRaw );
     
-    _iter++;
+    _iterRaw++;
   }
+
+  FTList< RecdHighLightsEncoder* >::Iterator _iterHL = m_lstHighLightsEncoders.Begin();
   
-  m_pRecdRenderEncoder->StartRecording( sDestination );
+  while ( _iterHL == TRUE )
+  {
+    RecdHighLightsEncoder* _pHighLightsEncoder = *_iterHL;
+    
+    _pHighLightsEncoder->SetParameters( sDestination, bRender, bHighlights, bRaw );
+    
+    _iterHL++;
+  }
+
+  return TRUE;
+}
+
+BOOL	RecdEncoderCollector::ReadyForRecording() const
+{
+  BOOL _bRetVal = TRUE;
+  
+  _bRetVal = (m_pRecdRenderEncoder->GetStatus()==RecdRenderEncoder::eREWaiting);
+
+  FTList< RecdStreamEncoder* >::Iterator _iterRaw = m_lstEncoders.Begin();
+  while ( _iterRaw == TRUE )
+  {
+    RecdStreamEncoder* _pStreamEncoder = *_iterRaw;
+    
+    _bRetVal &= (_pStreamEncoder->GetStatus()==RecdStreamEncoder::eSEWaiting);
+    
+    _iterRaw++;
+  }
+
+  FTList< RecdHighLightsEncoder* >::Iterator _iterHL = m_lstHighLightsEncoders.Begin();
+  
+  while ( _iterHL == TRUE )
+  {
+    RecdHighLightsEncoder* _pHighLightsEncoder = *_iterHL;
+    
+    _bRetVal &= (_pHighLightsEncoder->GetStatus( NULL, NULL )==RecdHighLightsEncoder::eHSWaiting);
+    
+    _iterHL++;
+  }
+
+  return _bRetVal;
+}
+
+BOOL	RecdEncoderCollector::StartHighLights( const FString& sCamera )
+{
+  FTList< RecdHighLightsEncoder* >::Iterator _iterHL = m_lstHighLightsEncoders.Begin();
+  
+  while ( _iterHL == TRUE )
+  {
+    RecdHighLightsEncoder* _pHighLightsEncoder = *_iterHL;
+    
+    if ( sCamera == "ALL" )
+      _pHighLightsEncoder->StartHighLight();
+    else 
+    if ( sCamera == _pHighLightsEncoder->GetStreamReader().GetCameraName() )
+      _pHighLightsEncoder->StartHighLight();
+    
+    _iterHL++;
+  }
   
   return TRUE;
 }
 
-BOOL	RecdEncoderCollector::StopRecording()
-{
-  FTList< RecdStreamEncoder* >::Iterator _iter = m_lstEncoders.Begin();
-  
-  while ( _iter == TRUE )
-  {
-    RecdStreamEncoder* _pStreamEncoder = *_iter;
-    
-    _pStreamEncoder->StopRecording();
-    
-    _iter++;
-  }
-  
-  m_pRecdRenderEncoder->StopRecording();
-  
-  return TRUE;
-}
+
+

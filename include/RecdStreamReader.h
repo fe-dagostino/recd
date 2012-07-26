@@ -24,8 +24,10 @@
 #include "FTMailbox.tlh"
 #include "FStopWatch.h"
 #include "LOGGING/FLogThread.h"
+#include "RecdMbxItem.h"
 #include "avdecoder.h"
 #include "avframe.h"
+#include "avfps.h"
 
 
 USING_NAMESPACE_FED
@@ -40,6 +42,21 @@ class RecdStreamReader : public FLogThread, protected IAVDecoderEvents
 {
   ENABLE_FRTTI( RecdStreamReader )
 public:
+  /**
+   * Reader status enumeration.
+   */
+  enum ReaderStatus
+  {
+    eRSUndefined=0,  // Initial status no action required.
+    eRSWaiting,      // Reader stay in waiting mode so input streaming is closed
+    eRSOpenStream,   // 
+    eRSBuffering,    // Input streaming has been opened and streaming will be buffered 
+    eRSReading,
+    eRSFlushing,
+    eRSReleasing
+  };
+  
+  
   /**
    *
    */
@@ -58,34 +75,41 @@ public:
   const FString& GetCameraName() const;
   
   /**
-   * Read/Dequeue first frame.
+   * Read/Dequeue first item.
    * @param bRemove  specify if the item must be removed ot not.
    * Return a pointer to an instance of CAVFrame, it bRemove was TRUE
    * returned value must be release with a call to ReleaseFrame.
    * NOTE: this method will be called from RecdReaderEncoder instance.
    */
-  CAVFrame* 	 GetRawFrame( DWORD dwTimeout, BOOL bRemove );
+  RecdMbxItem*   PopRawItem( DWORD dwTimeout, BOOL bRemove );
   /**
-   * Read/Dequeue first frame.
-   * As for GetRawFrame but destinated to be used from RecdHighLightsEncoder instances.
+   * Read/Dequeue first item.
+   * As for PopRawItem but destinated to be used from RecdHighLightsEncoder instances.
    */   
-  CAVFrame* 	 GetHighLightsFrame( DWORD dwTimeout, BOOL bRemove );
+  RecdMbxItem*   PopHighLightsItem( DWORD dwTimeout, BOOL bRemove );
   /***/ 
-  DWORD 	 GetRawMailboxSize() const;
+  BOOL           PushHighLightsItem( RecdMbxItem* pMbxItem );
+  /***/ 
+  DWORD          GetRawMailboxSize() const;
   /***/
-  DWORD 	 GetHighLightsMailboxSize() const;
+  DWORD          GetHighLightsMailboxSize() const;
   
   /**
    * Release specified pointer.
    * To be used for pointers returned both from GetRawFrame and GetHighLightsFrame
    */
-  VOID 	 ReleaseFrame( CAVFrame*& pAVFrame );
+  VOID           ReleaseMbxItem( RecdMbxItem*& pMbxItem );
    
   /**
-   * Start/Stop Reading.
+   * Return current status for the reader.
+   * @param pdElapsed if valid and current status is equal to eRSBuffering or eRSFlushing
+   * it will be initialized with amount of second elapsed.
+   * @param pdTotal if valid will be initialized with the upper value of pdElapsed time.
    */
-  VOID 	 SetReading( BOOL bEnable );
-   
+  enum ReaderStatus GetStatus( DOUBLE* pdElapsed, DOUBLE* pdTotal ) const;
+  /***/  
+  bool              SetStatus( ReaderStatus eStatus );
+  
 // Implements IAVDecoderEvents interface  
 protected:
   /**
@@ -100,6 +124,13 @@ protected:
    */
   virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst );
 
+  /**
+   *  Event will be raised for each frame coming from the stream.
+   *  Return value true in order to continue decoding, false to interrupt.
+   *  Note: this event will be raised for each frame.
+   */
+  virtual bool   OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVCodecContext* pAVCodecCtx, double pst );
+  
   /**
     *  Event will be raised for each frame coming from the stream.
     *  Return value true in order to continue decoding, false to interrupt.
@@ -125,17 +156,19 @@ private:
   DWORD   	GetVerbosityLevelFlags() const;
   
 private:
-  FString                 m_sIpCamera;
-  BOOL                    m_bExit;
-  CAVDecoder* 		  m_pAvReader;
-  FMutex                  m_mtxReading;
-  BOOL                    m_bReading;
-  FSemaphore              m_semStop;
-  BOOL                    m_bGotKeyFrame;
-  DOUBLE		  m_dStopWatchCMP; // Used in order to compare stop watch elapsed time.
-  FStopWatch		  m_swStopReading;
-  FTMailbox<CAVFrame* >*  m_pMbxRawFrames;
-  FTMailbox<CAVFrame* >*  m_pMbxHighLightsFrames;
+  mutable FMutex             m_mtxReader;
+  ReaderStatus volatile      m_eReaderStatus;
+  FString                    m_sIpCamera;
+  BOOL                       m_bExit;
+  CAVDecoder*                m_pAvReader;
+  BOOL                       m_bGotKeyFrame;
+  DOUBLE                     m_dStopWatchCMP; // Used in order to compare stop watch elapsed time.
+  FStopWatch                 m_swStopReading;
+  CAVFps                     m_fps;
+  DWORD                      m_dwReaderMaxItems;
+  BOOL                       m_bFilters;
+  FTMailbox<RecdMbxItem* >*  m_pMbxRawItems;
+  FTMailbox<RecdMbxItem* >*  m_pMbxHighLightsItems;
 };
 
 #endif // RECDSTREAMREADER_H

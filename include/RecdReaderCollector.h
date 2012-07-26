@@ -48,12 +48,33 @@ public:
   RecdStreamReader& 	GetStreamReader( const FString& sCamera );
   
   /**
-   *  Activate/Deactivate reading on each camera. 
+   * Activate/Deactivate reading on each camera. 
    */
   BOOL			SetReading( BOOL bEnable );
   
+  /**
+   * Return percentage for reading buffers.
+   * @param eStatus if eRSBuffering function will return TRUE only when all readers are fully buffered and
+   *                currently in reading status.
+   *                if eRSFlushing  function will return TRUE only when all readers are fully flushed and
+   *                currently status is waiting.
+   * @param pdPercentage could be NULL. If valid will be updated with current buffer percentage. 
+   */
+  BOOL                  GetBuffers( RecdStreamReader::ReaderStatus eStatus, DOUBLE* pdPercentage ) const;
+
+  /**
+   *  Check if all readers are in the specified status.
+   */
+  BOOL                  CheckStatus( RecdStreamReader::ReaderStatus eStatus ) const;
+
+  /**
+   */
+  BOOL                  IsEnabled() const;
+  
 private:
+  mutable FMutex                m_mtxReaders;
   FTList< RecdStreamReader* >   m_lstReaders;
+  BOOL                          m_bEnabled;
 };
 
 #endif // RECDREADERCOLLECTOR_H

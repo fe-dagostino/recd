@@ -37,6 +37,19 @@ class RecdHighLightsEncoder : public FLogThread
 {
   ENABLE_FRTTI( RecdHighLightsEncoder )
 public:
+  
+  /**
+   * High Lights Encoder Status status enumeration.
+   */
+  enum HighLightsEncoderStatus
+  {
+    eHSUndefined,    // Initial status no action required.
+    eHSWaiting,      // Reader stay in waiting mode so input streaming is closed
+    eHSOpenStream,   // 
+    eHSEncoding,
+    eHSReleasing
+  };
+  
   /**
    * 
    */
@@ -52,11 +65,7 @@ public:
   /**
    *  Activate recording on stream reader. 
    */
-  VOID			StartRecording( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw );
-  /**
-   *  Deactivate recording on stream reader. 
-   */
-  VOID			StopRecording();
+  VOID			     SetParameters( const FString& sDestination, BOOL bRender, BOOL bHighlights, BOOL bRaw );
     
   /**
    *  Start writing Highlight. 
@@ -64,11 +73,21 @@ public:
    *  reinitialized with the effect to have the final render longer
    *  than buffering time specified in configuration.
    */
-  BOOL			StartHighLights();
+  BOOL			     StartHighLight();
   
   /***/
   const RecdStreamReader&    GetStreamReader() const
   { return m_rStreamReader; }
+
+  /***/
+  enum HighLightsEncoderStatus GetStatus( DOUBLE* pdElapsed, DOUBLE* pdTotal ) const;
+
+private:  
+  /**
+   * In order to avoid potential access violations status must be modified
+   * using exchanging mailbox.
+   */
+  bool                         SetStatus( HighLightsEncoderStatus eStatus );
   
 // Implements virtual method defined in FThread  
 protected:
@@ -89,17 +108,18 @@ private:
   DWORD   	GetVerbosityLevelFlags() const;
   
 private:
-  BOOL                m_bExit;
-  FMutex              m_mtxRecording;  
-  BOOL                m_bRecording;
-  BOOL                m_bHighlights;
-  CAVEncoder*         m_pAVEncoder;
-  FSemaphore          m_semStop;
-  FString             m_sDestination;
-  CAVImage            m_rgbaBkg;
-  RecdStreamReader&   m_rStreamReader;
-  FStopWatch          m_swFPS;
-  FStopWatch          m_swHighLights;
+  BOOL                    m_bExit;
+  mutable FMutex          m_mtxEncoder;
+  HighLightsEncoderStatus m_eEncoderStatus;  
+  BOOL                    m_bHighlights;
+  CAVEncoder*             m_pAVEncoder;
+  FString                 m_sDestination;
+  DOUBLE                  m_dHighLightDuration;
+  CAVImage                m_rgbaBkg;
+  RecdStreamReader&       m_rStreamReader;
+  FStopWatch              m_swFPS;
+  FStopWatch              m_swHighLights;
+  FTQueue<RecdMbxItem* >* m_pVideoItems;
 };
 
 #endif // RECDSTREAMENCODER_H
