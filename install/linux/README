@@ -9,13 +9,17 @@ The script will install the program in /home/recd
 |
 |- bin 
 |- cfg
+|- tools
 
 "bin" subdir will contains recd, recd_d and recd.cron
 -recd      : is the deamon compiled in release mode
 -recd.cron : used to create a cron job, this script will check for the process recd and if not running it will be executed.
 
-"cfg" subir will contains recd.cfg 
+"cfg" subdir will contains recd.cfg 
 -recd.cfg  : configuration file for recording deamon
+
+"tools" subdir will contains all tools program
+-capture   : it is a program able to save one PNG file from specified source, so usefull during a new installation in order to create the skins.
 
 The install.sh script also create a sub folder in  /etc/ named recd and in that subfolder just a simbolic link to -> recd.cfg
 
