@@ -18,10 +18,10 @@ IF( CMAKE_BUILD_TYPE STREQUAL "Debug" )
         -debug
      )
   set(  RECD_CLI_VERSION
-        -1.0.0-debug
+        -2.0.0-debug
      )
   set(  LIBAVCPP_VER
-	-1.1.0-debug
+	-2.0.0-debug
     )
   set(  FEDLIB_VER
         -3.0.0-debug
@@ -30,10 +30,10 @@ ELSE()
   set(  RECD_VERSION
      )
   set(  RECD_CLI_VERSION
-        -1.0.0
+        -2.0.0
      )
   set(  LIBAVCPP_VER
-	-1.1.0
+	-2.0.0
     )
   set(  FEDLIB_VER
         -3.0.0
@@ -51,6 +51,7 @@ set(  RECD_INCLUDE
         ./include/RecdConfigException.h
         ./include/RecdEvents.h
         ./include/RecdResult.h
+        ./include/RecdAudioReader.h
         ./include/RecdStreamReader.h
         ./include/RecdReaderCollector.h
         ./include/RecdRenderEncoder.h
@@ -83,6 +84,7 @@ set(  RECD_SRC
         ./src/RecdConfigException.cpp
         ./src/RecdEvents.cpp
         ./src/RecdRenderEncoder.cpp
+        ./src/RecdAudioReader.cpp
         ./src/RecdStreamReader.cpp
         ./src/RecdReaderCollector.cpp
         ./src/RecdStreamEncoder.cpp
@@ -101,6 +103,12 @@ set(  RECD_CLI_LIBRARIES
 )
 
 set(  RECD_LIBRARIES
+      pthread
+      libavcpp${LIBAVCPP_VER}
+      fedlibrary${FEDLIB_VER}
+)
+
+set(  CAPTURE_LIBRARIES
       pthread
       libavcpp${LIBAVCPP_VER}
       fedlibrary${FEDLIB_VER}
@@ -126,12 +134,14 @@ add_definitions(
 		)
 
 
-add_library   ( recdclient${RECD_CLI_VERSION}  SHARED ${RECD_CLI_SRC} )
-add_executable( recd${RECD_VERSION}                   ${RECD_SRC}     )
-
+add_library   ( recdclient${RECD_CLI_VERSION}  SHARED ${RECD_CLI_SRC}    )
+add_executable( recd${RECD_VERSION}                   ${RECD_SRC}        )
+add_executable( capture                               utils/capture.cpp  )
 
 target_link_libraries( recdclient${RECD_CLI_VERSION}  ${RECD_CLI_LIBRARIES} )
 target_link_libraries( recd${RECD_VERSION}            ${RECD_LIBRARIES}     )
+target_link_libraries( capture                        ${CAPTURE_LIBRARIES}  )
+
 
 install( TARGETS recdclient${RECD_CLI_VERSION}  LIBRARY DESTINATION /usr/local/lib )
 install( FILES   ${RECD_CLI_INCLUDE} DESTINATION /usr/include/librecdcli )
