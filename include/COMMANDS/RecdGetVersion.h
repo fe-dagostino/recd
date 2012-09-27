@@ -47,7 +47,7 @@ public:
   {  
     //      01234567890123456789012345678901234567890123456789012345678901234567890123456789
     //      01234567890123456789012345
-    return "get version()             Return app version in the form x.y.z.b."; 
+    return "get version();            Return app version in the form x.y.z.b."; 
   }
 
   FString            Help() const
