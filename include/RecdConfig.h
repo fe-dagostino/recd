@@ -116,6 +116,13 @@ public:
   FString	GetReaderFiltersConfiguration( const FString& sFilterSection, BOOL* pbStored ) const;
 
   
+  /**
+   * Return delay time for the reader during stand-by mode.
+   * Default value is 30 ms.
+   */
+  DWORD 	GetAudioReaderStandByDelay( BOOL* pbStored ) const;
+  
+  
   
   /**
    * Return max number of items that can be buffered from encoder thread.
