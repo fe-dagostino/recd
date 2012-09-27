@@ -234,6 +234,7 @@ VOID	RecdHighLightsEncoder::Run()
 			      AV_ENCODE_VIDEO_STREAM|AV_ENCODE_AUDIO_STREAM,
 			      _iWidth,
 			      _iHeight,
+			      PIX_FMT_YUV420P,
 			      RecdConfig::GetInstance().GetHighLightsEncoderFps       ( _sCameraName, NULL ),
 			      RecdConfig::GetInstance().GetHighLightsEncoderGoP       ( _sCameraName, NULL ),
 			      RecdConfig::GetInstance().GetHighLightsEncoderBitRate   ( _sCameraName, NULL ),
