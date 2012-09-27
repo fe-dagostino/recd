@@ -299,6 +299,7 @@ VOID	RecdStreamEncoder::Run()
 					    AV_ENCODE_VIDEO_STREAM|AV_ENCODE_AUDIO_STREAM,
 					    _iWidth,
 					    _iHeight,
+					    PIX_FMT_YUV420P,
 					    RecdConfig::GetInstance().GetEncoderFps       ( _sCameraName, NULL ),
 					    RecdConfig::GetInstance().GetEncoderGoP       ( _sCameraName, NULL ),
 					    RecdConfig::GetInstance().GetEncoderBitRate   ( _sCameraName, NULL ),
