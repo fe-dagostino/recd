@@ -418,6 +418,7 @@ VOID	RecdRenderEncoder::Run()
 					    AV_ENCODE_VIDEO_STREAM,
 					    _iWidth,
 					    _iHeight,
+					    PIX_FMT_YUV420P,
 					    RecdConfig::GetInstance().GetRenderFps       ( NULL ),
 					    RecdConfig::GetInstance().GetRenderGoP       ( NULL ),
 					    RecdConfig::GetInstance().GetRenderBitRate   ( NULL ),
