@@ -27,7 +27,6 @@ else
 fi
 
 # Pakages installation
-#dpkg -i ./pkg/*.deb
 dpkg -i ./pkg/libmp3lame0_3.98.4-0.0_amd64.deb
 dpkg -i ./pkg/multiarch-support_2.13-33_amd64.deb
 dpkg -i ./pkg/libvo-aacenc0_0.1.2-1_amd64.deb
@@ -60,6 +59,18 @@ cp ./bin/$PRGD   /home/$USER/bin/
 echo "Copy cron check version ..."
 cp ./$CRON /home/$USER/bin/
 
+#
+# Tools installation
+#
+if [ ! -d /home/$USER/tools ]
+then
+	echo "Create tools directory ..."
+	mkdir /home/$USER/tools
+fi
+
+echo "Copy capture tool ..."
+cp ./tools/capture /home/$USER/tools/
+
 echo "Change owner for /home/$USER"
 chown -R $USER:users /home/$USER
 
@@ -79,8 +90,14 @@ then
 	mkdir /home/$USER/cfg
 fi
 
+echo "Save previous deamon cfg ..."
+if [ -f /home/$USER/cfg/$CONF ]
+then
+	echo "backup current configuration as $CONF.bak ..."
+	cp /home/$USER/cfg/$CONF /home/$USER/cfg/$CONF.bak
+fi
 echo "Copy deamon cfg ..."
-cp ./cfg/recd.cfg                       /home/$USER/cfg/
+cp ./cfg/$CONF                          /home/$USER/cfg/
 echo "Copy default skin cfg ..."
 cp ./cfg/*.png                          /home/$USER/cfg/
 
