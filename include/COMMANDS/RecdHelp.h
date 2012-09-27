@@ -46,7 +46,7 @@ public:
   {  
     //      01234567890123456789012345678901234567890123456789012345678901234567890123456789
     //      01234567890123456789012345
-    return "help()                    Provide help for specified command."; 
+    return "help();                   Provide help for specified command."; 
   }
 
   FString            Help() const
