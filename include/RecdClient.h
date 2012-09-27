@@ -43,17 +43,29 @@ public:
    * Return Total size and amount of available size on the specified mount point.
    * Available size refers to the amount of space available for the user.
    * @param sMountPoint [input] mount point to be checked.
-   * @param dTotal      [output] total size
-   * @param dFree       [output] available size
+   * @param dTotal      [output] total size in Gigabyte
+   * @param dFree       [output] available size in Gigabyte
    * Function return TRUE in case of success, FALSE otherwise.
    */
   bool          GetDiskSize( const FString& sMountPoint, double& dTotal, double& dFree );
   
   /**
+   * Return both write and read speed on the specified mount point.
+   * @param sMountPoint [input] mount point to be checked.
+   * @param dSize       [input] Kb units to be wrote and read
+   * @param dReadTime   [output] Read time
+   * @param dWriteTime  [output] Write time
+   * Function return ZERO in case of success, a negative value otherwise.
+   */
+  int           CheckDiskSpeed( const FString& sMountPoint, int iSize, double& dWriteTime, double& dReadTime );
+  
+  /**
    * Estimate available recording time based on services and amount of available space.
    * Return time in seconds, -1.0 means error. 
+   * @param iMin  will be populated with the minimum amount of concurrent files.
+   * @param iMax  will be populated with the maximum amount of concurrent files.
    */
-  double 	EstimateTime( double dSize, bool bRender, bool bHighlights, bool bRaw );
+  int           EstimateTime( double dSize, bool bRender, bool bHighlights, bool bRaw, int &iMin, int &iMax );
   
   /**
    * Start recording for specified services.
