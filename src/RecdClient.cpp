@@ -69,6 +69,44 @@ bool    RecdClient::GetDiskSize( const FString& sMountPoint, double& dTotal, dou
   return _bRetVal;
 }
 
+int   RecdClient::CheckDiskSpeed( const FString& sMountPoint, int iSize, double& dWriteTime, double& dReadTime )
+{
+  FMutexCtrl _mtxCtrl( m_mtxClient );
+  bool       _iRetVal = 0;
+  
+  if ( Connect() == false )
+  {
+    _iRetVal = -1;
+    return _iRetVal;
+  }
+  
+  FArguments _argsRes;
+  FArguments _argsParams;
+  
+  _argsParams.Add( new FString( sMountPoint )    );
+  _argsParams.Add( new FString( 0, "%d", iSize ) );  
+  
+  if ( m_pRciClient->Execute( _argsRes, "CHECK DISK SPEED", _argsParams, m_iReadTimeout * iSize ) == rciError )
+  {
+    Disconnect();
+    
+    _iRetVal = -2;
+    return _iRetVal;
+  }
+
+  if ( _argsRes[0] == "OK" )
+  {
+    dWriteTime   = (double)_argsRes[1];
+    dReadTime    = (double)_argsRes[2];
+  }
+  else
+  {
+    _iRetVal   = (int)_argsRes[1];
+  } 
+   
+  return _iRetVal;
+}
+
 bool    RecdClient::GetBuffers( bool bFlushBuffers, double& dPercentage )
 {
   FMutexCtrl _mtxCtrl( m_mtxClient );
@@ -100,14 +138,14 @@ bool    RecdClient::GetBuffers( bool bFlushBuffers, double& dPercentage )
   return _bRetVal;
 }
 
-double 	RecdClient::EstimateTime( double dSize, bool bRender, bool bHighlights, bool bRaw )
+int 	RecdClient::EstimateTime( double dSize, bool bRender, bool bHighlights, bool bRaw, int &iMin, int &iMax )
 {
   FMutexCtrl _mtxCtrl( m_mtxClient );
-  double     _dRetVal = -1.0;
+  int        _iRetVal = -1;
   
   if ( Connect() == false )
   {
-    return _dRetVal;
+    return _iRetVal;
   }
   
   FArguments _argsRes;
@@ -122,15 +160,17 @@ double 	RecdClient::EstimateTime( double dSize, bool bRender, bool bHighlights, 
   {
     Disconnect();
     
-    return _dRetVal;
+    return _iRetVal;
   }
 
   if ( _argsRes[0] == "OK" )
   {
-    _dRetVal = (double)_argsRes[1];
+    _iRetVal = (int)_argsRes[1];
+    iMin     = (int)_argsRes[2];
+    iMax     = (int)_argsRes[3];
   }
 
-  return _dRetVal;
+  return _iRetVal;
 }
 
 bool    RecdClient::StartRecording( const FArguments& args, bool bRender, bool bHighlights, bool bRaw )
