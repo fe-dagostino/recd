@@ -38,6 +38,7 @@
 #include "COMMANDS/RecdGetDiskSize.h"
 #include "COMMANDS/RecdGetBuffers.h"
 #include "COMMANDS/RecdEstimateTime.h"
+#include "COMMANDS/RecdCheckDiskSpeed.h"
 
 
 USING_NAMESPACE_LOGGING
@@ -68,6 +69,7 @@ BOOL RecdCmdServer::Initialize()
   m_rciServer.GetCommandCollector().Register( new RecdStartRecording()             );
   m_rciServer.GetCommandCollector().Register( new RecdStopRecording()              );
   m_rciServer.GetCommandCollector().Register( new RecdStartHighLights()            );
+  m_rciServer.GetCommandCollector().Register( new RecdCheckDiskSpeed()             );
     
   IConnectionFactory*  _pIConnectionFactory	= new FTcpConnectionFactory();
   if ( _pIConnectionFactory == NULL )
