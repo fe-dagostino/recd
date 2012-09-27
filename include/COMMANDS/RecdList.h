@@ -46,7 +46,7 @@ public:
   {  
     //      01234567890123456789012345678901234567890123456789012345678901234567890123456789
     //      01234567890123456789012345
-    return "list()                    Return the list of all available commands."; 
+    return "list();                   Return the list of all available commands."; 
   }
 
   FString            Help() const
