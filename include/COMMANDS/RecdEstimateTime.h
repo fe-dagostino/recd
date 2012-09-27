@@ -50,7 +50,7 @@ public:
     //      01234567890123456789012345
     return "estimate time(<size gb>, <render>, <highlights>, <raw>);\r\n"
            "                          Return the amoutn of time for required services.\r\n"
-           "                          Size should be in Gigabite. Services should be\r\n"
+           "                          Size should be in Gigabytes. Services should be\r\n"
            "                          a value 0 (Zero) or 1 (One) where 1 means that\r\n"     
            "                          service is required as part of estimation.";     
   }
@@ -80,10 +80,17 @@ public:
     double  _dRenderBitRate     = 0.0;
     double  _dRawBitRate        = 0.0;
     double  _dHighlightsBitRate = 0.0;
+    int     _iMinConcurrent     = 0;
+    int     _iMaxConcurrent     = 0;
+    
     
     if ( _sRender == "1" )
+    {
       _dRenderBitRate = RecdConfig::GetInstance().GetRenderBitRate( NULL );
-    
+      
+      _iMinConcurrent++;
+      _iMaxConcurrent++;
+    }
     
     FParameter*  _pIpCameras = RecdConfig::GetInstance().GetIpCameras( NULL );
     if ( _pIpCameras == NULL )
@@ -97,10 +104,19 @@ public:
 	FString _sCamera = _pIpCameras->GetValue( _dwItem );
 
 	if ( _sRaw    == "1" )
+	{
 	  _dRawBitRate += (double)RecdConfig::GetInstance().GetEncoderBitRate( _sCamera, NULL );
+
+	  _iMinConcurrent++;
+	  _iMaxConcurrent++;
+	}
 	
 	if ( _sHighlights == "1" )
+	{
 	  _dHighlightsBitRate = (double)RecdConfig::GetInstance().GetHighLightsEncoderBitRate( _sCamera, NULL );
+	  
+	  _iMaxConcurrent++;
+	}
       }
     }
 
@@ -116,7 +132,9 @@ public:
 
     _dTime     = _dAvailabeSize / _dSizePerSec; 
 
-    rResults.Add( new FString( _dTime ) );
+    rResults.Add( new FString( (int)_dTime     ) );
+    rResults.Add( new FString( _iMinConcurrent ) );
+    rResults.Add( new FString( _iMaxConcurrent ) );
 
     return _retVal;
   }
