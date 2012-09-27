@@ -209,7 +209,20 @@ FString RecdConfig::GetReaderFiltersConfiguration( const FString& sFilerSection,
 }
 
 
+DWORD 	RecdConfig::GetAudioReaderStandByDelay( BOOL* pbStored ) const
+{
+  FTRY
+  {
+    return (DWORD)m_cfg.GetValue( "AUDIO", "READER SETTINGS", 0, pbStored );
+  }
+  FCATCH( FConfigFileException, fexception  )
+  {
+    TRACE_EXCEPTION_CATCH( fexception, GetAudioReaderStandByDelay() );
+  }
 
+  //Return default value
+  return 30;
+}  
 
 DWORD RecdConfig::GetEncoderMaxItems( const FString& sIPCamera, BOOL* pbStored ) const
 {
