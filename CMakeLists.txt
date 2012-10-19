@@ -18,25 +18,25 @@ IF( CMAKE_BUILD_TYPE STREQUAL "Debug" )
         -debug
      )
   set(  RECD_CLI_VERSION
-        -2.0.0-debug
+        -2.0.1-debug
      )
   set(  LIBAVCPP_VER
-	-2.0.0-debug
+	-3.0.0-debug
     )
   set(  FEDLIB_VER
-        -3.0.0-debug
+        -3.0.1-debug
      )
 ELSE()
   set(  RECD_VERSION
      )
   set(  RECD_CLI_VERSION
-        -2.0.0
+        -2.0.1
      )
   set(  LIBAVCPP_VER
-	-2.0.0
+	-3.0.0
     )
   set(  FEDLIB_VER
-        -3.0.0
+        -3.0.1
      )
 ENDIF()
 
