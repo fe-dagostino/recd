@@ -169,7 +169,7 @@ enum RecdStreamReader::ReaderStatus RecdStreamReader::GetStatus( DOUBLE* pdElaps
   }
   
   VERBOSE_INFO( 
-		FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, 
+		FLogMessage::VL_HIGH_PERIODIC_MESSAGE, 
 		FString( 0, "Current Readers Status [%d][%.2f][%.2f]", m_eReaderStatus, m_swStopReading.Peek(), m_dStopWatchCMP ), 
 	        GetStatus() 
 	      )
@@ -195,23 +195,27 @@ bool              RecdStreamReader::SetStatus( ReaderStatus eStatus )
   return true;
 }
 
-void   RecdStreamReader::OnVideoKeyFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst )
+void   RecdStreamReader::OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pst )
 {
-  m_bGotKeyFrame = TRUE;
-  
-  if ( m_bGotKeyFrame )
+  if ( m_bGotKeyFrame == FALSE )
   {
-    m_fps.init( 
-		1/av_q2d(pAVCodecCtx->time_base),
-		(DOUBLE)RecdConfig::GetInstance().GetReaderFpsLimits( GetCameraName(), NULL )
-	      );
+    m_bGotKeyFrame = TRUE;
+    m_dwFpsCount   = 0;
+    m_swFps.Reset();
+    
+    DOUBLE dSourceFps = pAVCodecCtx->ticks_per_frame * av_q2d(pAVCodecCtx->time_base) * AV_TIME_BASE;
+    DOUBLE dWishedFps = (DOUBLE)RecdConfig::GetInstance().GetReaderFpsLimits( GetCameraName(), NULL );
+        
+    m_fps.init( dSourceFps, dWishedFps );
   }
 }
 
+
 bool   RecdStreamReader::OnVideoFrame( 
 					const  AVFrame* pAVFrame,
+					const AVStream* pAVStream,
 					const  AVCodecContext* pAVCodecCtx, 
-					double pst 
+					double pts 
 				     )
 {
   // If filters has been enabled all operation must be performed in OnFilteredVideoFrame() event
@@ -222,17 +226,30 @@ bool   RecdStreamReader::OnVideoFrame(
   if ( m_bGotKeyFrame == FALSE )
     return true;
   
+  // Just count and log average fps
+  if (m_swFps.Peek() >= 1.0 )
+  {
+    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, FString( 0, "AVG FPS [%d]",  m_dwFpsCount ), OnVideoFrame() )
+    
+    m_swFps.Reset();
+    m_dwFpsCount = 1;
+  }
+  else
+  {
+    m_dwFpsCount++;
+  }
+  
   // Check if current frame must be delete.
   // This condition could happens when source fps greater than whished fps
   if ( m_fps.bDrop() )
   {
     m_fps.reset();
     
-    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", Run() )
+    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", OnVideoFrame() )
 
     return true;    
   }
-
+  
   if ( m_pMbxRawItems->GetSize()       <= m_dwReaderMaxItems )
   {
     CAVImage*  _pAVRawImage      = new CAVImage();
@@ -274,23 +291,40 @@ bool   RecdStreamReader::OnVideoFrame(
 		OnVideoFrame() 
 	      )
   
-  
   return true;
 }
 
-bool    RecdStreamReader::OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVCodecContext* pAVCodecCtx, double pst )
+bool    RecdStreamReader::OnFilteredVideoFrame( 
+						const AVFilterBufferRef* pAVFilterBufferRef,
+						const AVStream* pAVStream,
+						const AVCodecContext* pAVCodecCtx, 
+						double pst
+					)
 {
   // Video processing will be avoided until the first Key frame will be received.
   if ( m_bGotKeyFrame == FALSE )
     return true;
+
+  // Just count and log average fps
+  if (m_swFps.Peek() >= 1.0 )
+  {
+    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, FString( 0, "AVG FPS [%d]",  m_dwFpsCount ), OnFilteredVideoFrame() )
     
+    m_swFps.Reset();
+    m_dwFpsCount = 1;
+  }
+  else
+  {
+    m_dwFpsCount++;
+  }
+  
   // Check if current frame must be delete.
   // This condition could happens when source fps greater than whished fps
   if ( m_fps.bDrop() )
   {
     m_fps.reset();
     
-    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", Run() )
+    VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Drop Current Frame ..", OnFilteredVideoFrame() )
 
     return true;    
   }
@@ -326,7 +360,12 @@ bool    RecdStreamReader::OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilt
   return true;
 }
 
-bool    RecdStreamReader::OnAudioFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst )
+bool    RecdStreamReader::OnAudioFrame( 
+					const AVFrame* pAVFrame,
+					const AVStream* pAVStream,
+					const AVCodecContext* pAVCodecCtx,
+					double pst
+				      )
 {
   if ( m_pMbxRawItems->GetSize()        <= m_dwReaderMaxItems )
   {
@@ -540,6 +579,7 @@ VOID	RecdStreamReader::Run()
 	
 	// Reset key fram waiting
 	m_bGotKeyFrame = FALSE;
+	m_dwFpsCount   = 0;
 	
 	// Update status to waiting mode.
 	SetStatus( eRSWaiting );
