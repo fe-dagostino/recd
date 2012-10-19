@@ -26,7 +26,7 @@ public:
     return &m_avImage;
   }
   
-  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double time )
+  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time )
   {
      printf( "Got Video KEY Frame ...\r\n" );
      m_avImage.init( pAVFrame, pAVCodecCtx, -1, -1, PIX_FMT_RGB32 );
@@ -54,17 +54,17 @@ public:
      }
   }
   
-  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double time )
+  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time )
   {
      return true;
   }
   
-  virtual bool   OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVCodecContext* pAVCodecCtx, double pst )
+  virtual bool   OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pst )
   {
     /* Nothing to do */  
   }
   
-  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double time )
+  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time )
   {
      return true;
   }
