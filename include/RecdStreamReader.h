@@ -115,27 +115,27 @@ protected:
   /**
    *  Event will be raised just in presence of one key frame.
    */
-  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst );
+  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );
 
   /**
    *  Event will be raised for each frame coming from the stream.
    *  Return value true in order to continue decoding, false to interrupt.
    *  Note: this event will be raised also for key frame.
    */
-  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst );
+  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );
 
   /**
    *  Event will be raised for each frame coming from the stream.
    *  Return value true in order to continue decoding, false to interrupt.
    *  Note: this event will be raised for each frame.
    */
-  virtual bool   OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVCodecContext* pAVCodecCtx, double pst );
+  virtual bool   OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );
   
   /**
     *  Event will be raised for each frame coming from the stream.
     *  Return value true in order to continue decoding, false to interrupt.
     */
-  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVCodecContext* pAVCodecCtx, double pst );  
+  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );  
   
 // Implements virtual method defined in FThread  
 protected:
@@ -162,6 +162,8 @@ private:
   BOOL                       m_bExit;
   CAVDecoder*                m_pAvReader;
   BOOL                       m_bGotKeyFrame;
+  FStopWatch                 m_swFps;
+  DWORD                      m_dwFpsCount;
   DOUBLE                     m_dStopWatchCMP; // Used in order to compare stop watch elapsed time.
   FStopWatch                 m_swStopReading;
   CAVFps                     m_fps;
