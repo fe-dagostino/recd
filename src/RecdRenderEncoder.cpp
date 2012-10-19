@@ -34,7 +34,6 @@ public:
     : FThread( NULL, FThread::TP_CRITICAL, -1 ),
       m_bExit( FALSE ),
       m_eStatus( eRTUndefined ),
-      m_bGotFrame( FALSE ),
       m_pRenderEncoder( pRenderEncoder ),
       m_pStreamEncoder( pStreamEncoder )
   {
@@ -43,22 +42,43 @@ public:
   virtual ~RenderThreads()
   {
   }
+  
+  BOOL    Reset()
+  {
+    m_evEndBlending.Reset();
+    m_evStartBlending.Reset();
 
-  BOOL    GotFrame() const
-  {  
-    return m_bGotFrame;  
+    return TRUE;
   }
   
-  VOID    Reset()
+  BOOL    SignalingBlending()
   {
-    m_swFPS.Invalidate();
-    m_bGotFrame = FALSE;
+    m_evStartBlending.Signal();
+    FThread::YieldThread();
+    
+    return TRUE;
+  }
+  
+  /**
+   * Return TRUE if Blending has been done, FALSE in case of timeout.
+   */
+  BOOL    WaitingBlending( ULONG nTimeout )
+  {
+    BOOL _bRetVal = m_evEndBlending.Wait( nTimeout );
+    if ( _bRetVal == TRUE )
+    {
+      m_evEndBlending.Reset();
+    }
+    
+    return _bRetVal;
   }
   
   inline enum RenderThreadStatus  GetStatus() const
   {
     return m_eStatus;
   }
+  
+private:
   
   inline VOID  SetStatus( enum RenderThreadStatus eStatus )
   {
@@ -171,27 +191,23 @@ protected:
 	    
 	    case  RecdMbxItem::eImageItem:
 	    {
-	      
-	      if (
-		    ( m_swFPS.IsValid()  == FALSE ) ||
-		    ( m_swFPS.Peek()     >= _dFPS )
-		  )
+	      /////////////////////////////
+	      // Waiting signal from encoder thread in order to blend current frame.
+	      if ( m_evStartBlending.Wait( _dFPS * 1000 ) )
 	      {
-		m_swFPS.Reset();
+		m_evStartBlending.Reset();
 	      }
-	      else // Skip frame
-	      {
-		VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, "Skip frame ..", Run() )
-		break;
-	      } 
-	  
-	      m_bGotFrame = TRUE;
+	      
 	      
 	      m_pRenderEncoder->Blend( 
 					m_pStreamEncoder->GetRenderPoint(),
 					*_pMbxItem->GetImage(),
 					m_pStreamEncoder->GetRenderColor()
 				    );
+
+	      // Signaling End of Blending
+	      m_evEndBlending.Signal();
+	      FThread::YieldThread();
 	      
 	    }; break;
 	  }//switch ( _pMbxItem->GetType() )
@@ -231,8 +247,8 @@ protected:
 private:
   BOOL                        m_bExit;
   RenderThreadStatus volatile m_eStatus;
-  BOOL volatile               m_bGotFrame;
-  FStopWatch                  m_swFPS;
+  FEvent                      m_evStartBlending;
+  FEvent                      m_evEndBlending;
   RecdRenderEncoder*          m_pRenderEncoder;
   RecdStreamEncoder*          m_pStreamEncoder;
 };
@@ -291,11 +307,12 @@ VOID   RecdRenderEncoder::SetParameters( const FString& sDestination )
 {
   FMutexCtrl _mtxCtrl( m_mtxEncoder );
 
-  for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+  // Send a signal to all rendering threads in order to start blending on current frame.
+  for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
   {
     m_pRenderThreads[iRenderThread]->Reset();
   }
-  
+
   m_sDestination = sDestination;
   
   SetStatus( eREOpenStream );
@@ -335,6 +352,8 @@ VOID	RecdRenderEncoder::Run()
   double     _dFPS             = 0.03333;
   double     _dFpsError        = 0.0;
   DWORD      _dwStandbyTimeout = RecdConfig::GetInstance().GetRenderStandByDelay( NULL );
+  FStopWatch _swFpsCount;
+  DWORD      _dwFpsCount = 0;
 
   // Update status to waiting mode.
   SetStatus( eREWaiting );
@@ -415,7 +434,7 @@ VOID	RecdRenderEncoder::Run()
 	LOG_INFO( FString( 0, "RENDERING OUT=[%s]", (const char*)_sOutFilename ), Run() )
 	AVResult _avRes = m_pAVEncoder->open( 
 					    _sOutFilename,
-					    AV_ENCODE_VIDEO_STREAM,
+					    AV_ENCODE_VIDEO_STREAM|AV_ENCODE_AUDIO_STREAM,
 					    _iWidth,
 					    _iHeight,
 					    PIX_FMT_YUV420P,
@@ -442,6 +461,10 @@ VOID	RecdRenderEncoder::Run()
 	// Invalidate fps stop watch
 	m_swFPS.Invalidate();
 
+	// Reset variables for avg fps counter
+	_swFpsCount.Reset();
+	_dwFpsCount = 0;
+	  
 	// Move to next state
 	SetStatus( eREEncoding );
       }; break;
@@ -451,22 +474,6 @@ VOID	RecdRenderEncoder::Run()
 	if ( CheckStatus( eRTReleasing ) == TRUE )
 	{
 	  SetStatus( eREReleasing );
-	  break;
-	}
-	
-	// Wait until all reading channels will got a frame to be processed.
-	BOOL _bGotFrames = TRUE;
-	for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
-	{
-	  // if at least one thread didn't got jet the first frame, rendering
-	  // will be suspended.
-	  _bGotFrames &= m_pRenderThreads[iRenderThread]->GotFrame();
-	}
-	
-	if ( _bGotFrames == FALSE )
-	{
-	  // if at least one thread didn't got a frame we will force
-	  // termination of current segment of code.
 	  break;
 	}
 	
@@ -489,22 +496,55 @@ VOID	RecdRenderEncoder::Run()
 	  continue;
 	}
 
-	// initialize autput frame.
-	_avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
-
-	if ( m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR ) != eAVSucceded )
+	// Send a signal to all rendering threads in order to start blending on current frame.
+	for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
 	{
-	  ERROR_INFO( "Failed to encode frame.", Run() )
-	  
-	  SetStatus( eREReleasing );
-	  break;
+	  m_pRenderThreads[iRenderThread]->SignalingBlending();
 	}
+	
+	BOOL _bAllDone = TRUE;
+	for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+	{
+	  _bAllDone &= m_pRenderThreads[iRenderThread]->WaitingBlending( _dFPS * 1000 );
+	}
+
+	if ( _bAllDone )
+	{
+	  // initialize autput frame.
+	  _avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
+	
+	  if ( m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR ) != eAVSucceded )
+	  {
+	    ERROR_INFO( "Failed to encode frame.", Run() )
+	    
+	    SetStatus( eREReleasing );
+	    break;
+	  }
+	}
+	
+	// Just count and log average fps
+	if (_swFpsCount.Peek() >= 1.0 )
+	{
+	  VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, FString( 0, "AVG FPS [%d]",  _dwFpsCount ), Run() )
+	  
+	  _swFpsCount.Reset();
+	  _dwFpsCount = 0;
+	}
+	else
+	{
+	  _dwFpsCount++;
+	}	
 	
       }; break;
       
       case eREReleasing:
       {
-
+	// Send a signal to all rendering threads in order to start blending on current frame.
+	for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+	{
+	  m_pRenderThreads[iRenderThread]->SignalingBlending();
+	}
+	
 	if ( m_pAVEncoder != NULL )
 	{
 	  LOG_INFO( "Close Encoder", Run() )
