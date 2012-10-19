@@ -176,7 +176,9 @@ VOID	RecdStreamEncoder::Run()
   double     _dFpsError         = 0.0;
   DWORD      _dwEncoderMaxItems = RecdConfig::GetInstance().GetEncoderMaxItems( m_rStreamReader.GetCameraName(), NULL );
   DWORD      _dwReadingTimeout  = RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
-  DWORD      _dwStandbyTimeout  = RecdConfig::GetInstance().GetEncoderStandByDelay( m_rStreamReader.GetCameraName(), NULL ); 
+  DWORD      _dwStandbyTimeout  = RecdConfig::GetInstance().GetEncoderStandByDelay( m_rStreamReader.GetCameraName(), NULL );
+  FStopWatch _swFpsCount;
+  DWORD      _dwFpsCount = 0;
   INT        _iRenderWidth  = -1;
   INT        _iRenderHeight = -1;
   DWORD      _dwEncoderOpts =  1;
@@ -317,6 +319,10 @@ VOID	RecdStreamEncoder::Run()
 	// Invalidate fps stop watch
 	m_swFPS.Invalidate();
 
+	// Reset variables for avg fps counter
+	_swFpsCount.Reset();
+	_dwFpsCount = 0;
+	
 	// Move to next state
 	SetStatus( eSEEncoding );
       }; break;
@@ -478,6 +484,20 @@ VOID	RecdStreamEncoder::Run()
 		  
 		  SetStatus( eSEReleasing );
 	      }
+	      
+	      // Just count and log average fps
+	      if (_swFpsCount.Peek() >= 1.0 )
+	      {
+		VERBOSE_INFO( FLogMessage::VL_MEDIUM_PERIODIC_MESSAGE, FString( 0, "AVG FPS [%d]",  _dwFpsCount ), Run() )
+		
+		_swFpsCount.Reset();
+		_dwFpsCount = 0;
+	      }
+	      else
+	      {
+		_dwFpsCount++;
+	      }
+	      
 	    }//if ( m_bRaw == TRUE )
 	    
 	  }; break;
