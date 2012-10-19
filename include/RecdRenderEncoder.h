@@ -100,7 +100,11 @@ protected:
   /**/
   virtual VOID		Run();
 
+
 private:
+  /**
+   */
+  BOOL		WriteFrame( CAVImage& avFrameYUV );
   /**
    * Return TRUE if all Rendering Threads are in the specified status.
    */
