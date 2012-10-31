@@ -119,7 +119,7 @@ private:
   RecdStreamReader&       m_rStreamReader;
   FStopWatch              m_swFPS;
   FStopWatch              m_swHighLights;
-  FTQueue<RecdMbxItem* >* m_pVideoItems;
+  FTQueue<RecdMbxItem* >* m_pVideoItems;    // Needed in order to avoid starving on image frame and not managing audio
 };
 
 #endif // RECDSTREAMENCODER_H
