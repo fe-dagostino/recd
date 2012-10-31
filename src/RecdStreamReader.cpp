@@ -264,7 +264,7 @@ bool   RecdStreamReader::OnVideoFrame(
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL ) 
 	);
 
-    m_pMbxRawItems->Write       ( new RecdMbxItem( _pAVRawImage      ) );
+    m_pMbxRawItems->Write       ( new RecdMbxItem( _pAVRawImage, pts      ) );
   }
     
   if ( m_pMbxHighLightsItems->GetSize() <= m_dwReaderMaxItems )
@@ -282,7 +282,7 @@ bool   RecdStreamReader::OnVideoFrame(
 	    _bBkgStatus?PIX_FMT_RGBA:PIX_FMT_YUV420P,
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL )
 	);
-    m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage ) );
+    m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage, pts ) );
   }       
     
   VERBOSE_INFO( 
@@ -298,7 +298,7 @@ bool    RecdStreamReader::OnFilteredVideoFrame(
 						const AVFilterBufferRef* pAVFilterBufferRef,
 						const AVStream* pAVStream,
 						const AVCodecContext* pAVCodecCtx, 
-						double pst
+						double pts
 					)
 {
   // Video processing will be avoided until the first Key frame will be received.
@@ -336,7 +336,7 @@ bool    RecdStreamReader::OnFilteredVideoFrame(
     // Initialized to original W:H
     _pAVRawImage->init( pAVFilterBufferRef, pAVCodecCtx->width, pAVCodecCtx->height ); 
 
-    m_pMbxRawItems->Write       ( new RecdMbxItem( _pAVRawImage      ) );
+    m_pMbxRawItems->Write       ( new RecdMbxItem( _pAVRawImage, pts      ) );
   }
   
   if ( m_pMbxHighLightsItems->GetSize() <= m_dwReaderMaxItems )
@@ -354,7 +354,7 @@ bool    RecdStreamReader::OnFilteredVideoFrame(
 	    _bBkgStatus?PIX_FMT_RGBA:PIX_FMT_YUV420P,
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL )
 	);
-    m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage ) );
+    m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage, pts ) );
   }
   
   return true;
@@ -364,7 +364,7 @@ bool    RecdStreamReader::OnAudioFrame(
 					const AVFrame* pAVFrame,
 					const AVStream* pAVStream,
 					const AVCodecContext* pAVCodecCtx,
-					double pst
+					double pts
 				      )
 {
   if ( m_pMbxRawItems->GetSize()        <= m_dwReaderMaxItems )
@@ -373,7 +373,7 @@ bool    RecdStreamReader::OnAudioFrame(
     
     pRawSample->init(pAVFrame, pAVCodecCtx);
     
-    m_pMbxRawItems->Write       ( new RecdMbxItem( pRawSample ) );
+    m_pMbxRawItems->Write       ( new RecdMbxItem( pRawSample, pts ) );
   }
     
   if ( m_pMbxHighLightsItems->GetSize() <= m_dwReaderMaxItems )
@@ -382,7 +382,7 @@ bool    RecdStreamReader::OnAudioFrame(
     
     pHLSample->init (pAVFrame, pAVCodecCtx);
     
-    m_pMbxHighLightsItems->Write( new RecdMbxItem( pHLSample  ) );
+    m_pMbxHighLightsItems->Write( new RecdMbxItem( pHLSample, pts  ) );
   }  
   
   return true;
