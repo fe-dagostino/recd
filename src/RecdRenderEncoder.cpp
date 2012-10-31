@@ -482,9 +482,12 @@ VOID	RecdRenderEncoder::Run()
 	    ( m_swFPS.Peek()    >= _dFPS ) 
 	  )
 	{
-	  // Cumulative error
-	  _dFpsError += m_swFPS.Peek() - _dFPS;
-	  
+	  if ( m_swFPS.IsValid() )
+	  {
+	    // Cumulative error
+	    _dFpsError += m_swFPS.Peek() - _dFPS;
+	  }
+	    
 	  m_swFPS.Reset();
 	}
 	else if ( _dFpsError >= _dFPS )
