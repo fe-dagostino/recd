@@ -55,19 +55,19 @@ public:
 
   /***/
   RecdMbxItem( MbxCommandType eMbxCommand )
-   : m_eItemType( eCommandItem ), m_eMbxCommand( eMbxCommand )
+   : m_eItemType( eCommandItem ), m_eMbxCommand( eMbxCommand ), m_dPTS(0.0)
   {
   }
   
   /***/
-  RecdMbxItem( CAVImage* pAVImage )
-   : m_eItemType( eImageItem ), m_pAVImage( pAVImage )
+  RecdMbxItem( CAVImage* pAVImage, double pts )
+   : m_eItemType( eImageItem ), m_pAVImage( pAVImage ), m_dPTS(pts)
   {
   }
   
   /***/
-  RecdMbxItem( CAVSample* pAVSample )
-   : m_eItemType( eSampleItem ), m_pAVSample( pAVSample )
+  RecdMbxItem( CAVSample* pAVSample, double pts )
+   : m_eItemType( eSampleItem ), m_pAVSample( pAVSample ), m_dPTS(pts)
   { 
   }
 
@@ -91,6 +91,8 @@ public:
    */
   inline MbxItemType     GetType() const
   { return m_eItemType; }
+  inline double          GetPTS() const
+  { return m_dPTS; }
   /***/
   inline MbxCommandType  GetCommand() const
   { return m_eMbxCommand; }
@@ -103,6 +105,7 @@ public:
   
 private:
   enum MbxItemType  m_eItemType;
+  double            m_dPTS;
   
   union {
   CAVImage*        m_pAVImage;
