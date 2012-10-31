@@ -393,8 +393,11 @@ VOID	RecdStreamEncoder::Run()
 		( m_swFPS.Peek()    >= _dFPS ) 
 	      )
 	    {
-	      // Cumulative error
-	      _dFpsError += m_swFPS.Peek() - _dFPS;
+	      if ( m_swFPS.IsValid() )
+	      {
+		// Cumulative error
+		_dFpsError += m_swFPS.Peek() - _dFPS;
+	      }
 	      
 	      m_swFPS.Reset();
 	      
@@ -436,7 +439,7 @@ VOID	RecdStreamEncoder::Run()
 			      );
 		
 		//Write a new frame into mailbox for rendering
-		m_pMbxItems->Write( new RecdMbxItem( pAVImage ) );
+		m_pMbxItems->Write( new RecdMbxItem( pAVImage, _pMbxItem->GetPTS() ) );
 	      }
 	    }//if ( m_bRender == TRUE )
 	    
