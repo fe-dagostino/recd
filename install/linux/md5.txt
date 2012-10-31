@@ -1,15 +1,14 @@
-4d895a0d20d4e7b0149fcb119a94054e  ./doc/html.tar.gz
+6f87d4a70e7c40b1638d53075febc59d  ./doc/html.tar.gz
 6117b20e0fd225d3b618cf1aa743db08  ./prepare.sh
 a365a4ee55b33bcd150858171fd967d9  ./cron.txt
 b16fd23549f17bb2492ce12b09ea8321  ./cfg/default-skin-highlights.png
 ff0145a9fae3be41e0ad3de3f5311e2b  ./cfg/recd.cfg
 2b409e299ead44ea4f306274364bf76e  ./cfg/default-skin-alpha.png
 585ebd3b7f4855c960384f6cd51605e6  ./cfg/default-skin-chroma-keys.png
-af794722bd5ba73b21f0ef0daf9308cd  ./bin/recd-debug
-e7d08b6cba687850e1f5ff892bc9f57a  ./bin/recd
-e4383c2723ccde9166f62f9dd559d011  ./install.sh~
+9dbcdf9d9ebc32ab30f47abef8c80261  ./bin/recd-debug
+72ad3819b78fe0f70f067c3de8872f51  ./bin/recd
 ac42ba64ae1835b07569e389c9014e2f  ./tools/capture
-79b416821793cc5b7c1f882d93d659fd  ./md5.txt
+b3ff1e7a3b4c622fd2fd1ca5f8617cdb  ./md5.txt
 97b788a85745822f70ed5580082c8302  ./check.cron
 02cedc71b316c6ca58850cf4a3e45d68  ./README
 f6d6597e6a0eb1ab55cc7ed3e5046c4e  ./install.sh
@@ -20,4 +19,4 @@ b2519e9779b721f7e44dcc3edfb5c71f  ./pkg/multiarch-support_2.13-33_amd64.deb
 681de15b877e47f50a362234b1b412f6  ./lib/libfedlibrary-3.0.1.so
 2a755d0a3cd4e8176732010f8888e454  ./lib/liblibavcpp-3.0.0-debug.so
 f32959cc140470a9bf05ed5e2e18c8ec  ./lib/liblibavcpp-3.0.0.so
-38dcb4005fc617e971293bbd901b9ba5  ./lib/libav.tgz
+4e124e636bb320917af22d403374f743  ./lib/libav.tgz
