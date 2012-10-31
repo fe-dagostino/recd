@@ -134,6 +134,7 @@ BOOL	RecdHighLightsEncoder::Final()
 VOID	RecdHighLightsEncoder::Run()
 {
   double     _dFPS              = 0.03333;
+  double     _dFpsCountDown     = 0;   // used to skip old frames in queue
   double     _dFpsError         = 0.0; 
   DWORD      _dwEncoderMaxItems = RecdConfig::GetInstance().GetEncoderMaxItems( m_rStreamReader.GetCameraName(), NULL );
   DWORD      _dwReadingTimeout  = RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
@@ -252,6 +253,7 @@ VOID	RecdHighLightsEncoder::Run()
 	}
 	
 	_dFPS                 = 1.0 / (double)RecdConfig::GetInstance().GetHighLightsEncoderFps( _sCameraName, NULL );
+	_dFpsCountDown        = RecdConfig::GetInstance().GetHighLightsEncoderFps( _sCameraName, NULL );
 	_dFpsError            = 0.0;
 	m_dHighLightDuration  = RecdConfig::GetInstance().GetHighLightsTimeSpan( _sCameraName, NULL );
 
@@ -275,7 +277,7 @@ VOID	RecdHighLightsEncoder::Run()
       {
 	RecdMbxItem* _pMbxItem = NULL;
 	
-	_dwReadingTimeout = (_dFpsError>=_dFPS)?1:RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
+	_dwReadingTimeout = (_dFpsError>=_dFPS)?0:RecdConfig::GetInstance().GetEncoderReadingTimeout( m_rStreamReader.GetCameraName(), NULL );
 	
 	_pMbxItem = m_rStreamReader.PopHighLightsItem( _dwReadingTimeout, TRUE );
 	if ( _pMbxItem == NULL )   
@@ -291,11 +293,11 @@ VOID	RecdHighLightsEncoder::Run()
 	  }
 	}
 
-
 	switch ( _pMbxItem->GetType() )
 	{
+	  
 	  case RecdMbxItem::eCommandItem:
-	  {
+	  {	    
 	    if ( _pMbxItem->GetCommand() == RecdMbxItem::eCmdStopEncoding )
 	    {
 	      SetStatus( eHSReleasing );
@@ -334,8 +336,11 @@ VOID	RecdHighLightsEncoder::Run()
 		( m_swFPS.Peek()    >= _dFPS ) 
 	      )
 	    {
-	      // Cumulative error
-	      _dFpsError += m_swFPS.Peek() - _dFPS;
+	      if ( m_swFPS.IsValid() )
+	      {
+		// Cumulative error
+		_dFpsError += m_swFPS.Peek() - _dFPS;
+	      }
 	      
 	      m_swFPS.Reset();
 	      
@@ -351,31 +356,42 @@ VOID	RecdHighLightsEncoder::Run()
 	    {
 	      continue;
 	    }
-	    
-	    AVResult eResult;
-	  
-	    // If background is valid alpha blending is required.
-	    if ( m_rgbaBkg.isValid() )
+
+
+	    // Used to drop old frames enqueued during output streaming opening operation.
+	    if ( _dFpsCountDown > 0 )
 	    {
-	      // In this case _pFrame is an RGB image
-	      m_rgbaBkg.blend( _avRenderPos, *_pMbxItem->GetImage() );
+	      _dFpsCountDown -= 1;
 	      
-	      // initialize autput frame.
-	      _avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
-	      
-	      eResult = m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR );
+	      m_swHighLights.Reset();
 	    }
 	    else
 	    {
-	      eResult = m_pAVEncoder->write( _pMbxItem->GetImage(), AV_INTERLEAVED_VIDEO_WR );
-	    }
+	      AVResult eResult;
 
-	    if (  eResult != eAVSucceded )
-	    {
-		ERROR_INFO( "Failed to encode frame.", Run() )
+	      // If background is valid alpha blending is required.
+	      if ( m_rgbaBkg.isValid() )
+	      {
+		// In this case _pFrame is an RGB image
+		m_rgbaBkg.blend( _avRenderPos, *_pMbxItem->GetImage() );
+		
+		// initialize autput frame.
+		_avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
+		
+		eResult = m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR );
+	      }
+	      else
+	      {
+		eResult = m_pAVEncoder->write( _pMbxItem->GetImage(), AV_INTERLEAVED_VIDEO_WR );
+	      }
+
+	      if (  eResult != eAVSucceded )
+	      {
+	  	ERROR_INFO( "Failed to encode frame.", Run() )
 		
 		SetStatus( eHSReleasing );
 		break;
+	      }
 	    }
 	  
 	    // Check if recording time is greater or equal to GetHighLightsTimeSpan()
