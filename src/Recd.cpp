@@ -33,7 +33,7 @@ Recd::Recd( int argc, char* argv[] )
                  TRUE,
                  new RecdEvents( *this ),
                  "Recording Daemon",
-                 MAKEVERSION( 1,3,3,0 ),
+                 MAKEVERSION( 1,3,4,0 ),
                  argc, argv
               )
 ENTER(Recd())
