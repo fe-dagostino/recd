@@ -21,7 +21,7 @@ IF( CMAKE_BUILD_TYPE STREQUAL "Debug" )
         -2.0.1-debug
      )
   set(  LIBAVCPP_VER
-	-3.0.0-debug
+	-3.1.0-debug
     )
   set(  FEDLIB_VER
         -3.0.1-debug
@@ -33,7 +33,7 @@ ELSE()
         -2.0.1
      )
   set(  LIBAVCPP_VER
-	-3.0.0
+	-3.1.0
     )
   set(  FEDLIB_VER
         -3.0.1
