@@ -25,6 +25,8 @@
 #include "avimage.h"
 #include "avfiltergraph.h"
 
+//#include "SDL2/SDL_audio.h"
+
 
 GENERATE_CLASSINFO( RecdAudioReader, FLogThread ) 
 
