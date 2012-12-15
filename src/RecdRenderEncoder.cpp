@@ -382,7 +382,8 @@ VOID	RecdRenderEncoder::Run()
       }; break;
       case eREOpenStream:
       {
-	FString _sOutFilename( 0, "%s/RENDER_%010d.mp4", (const char*)m_sDestination, time(NULL) ); 
+	FDateTime _dtNow( TRUE, TRUE );
+	FString   _sOutFilename( 0, "%s/RENDER_%s.mp4", (const char*)m_sDestination, (const char*)_dtNow.GetDateTime( "%A%-%M%-%G%_%h%%m%%s%" ) ); 
 	
 	//Loading background image.
 	FString sBkgFilename     = RecdConfig::GetInstance().GetRenderBackground( NULL );

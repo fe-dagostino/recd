@@ -241,7 +241,8 @@ VOID	RecdStreamEncoder::Run()
 	  break;
 	}
 	
-	FString _sOutFilename( 0, "%s/%s_%010d.mp4", (const char*)m_sDestination, (const char*)_sCameraName, time(NULL) ); 
+	FDateTime _dtNow( TRUE, TRUE );
+	FString   _sOutFilename( 0, "%s/%s_%s.mp4", (const char*)m_sDestination, (const char*)_sCameraName, (const char*)_dtNow.GetDateTime( "%A%-%M%-%G%_%h%%m%%s%" ) ); 
 	
 	m_pAVEncoder = new CAVEncoder();
 	if ( m_pAVEncoder == NULL )

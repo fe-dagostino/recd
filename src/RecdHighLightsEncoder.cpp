@@ -177,9 +177,9 @@ VOID	RecdHighLightsEncoder::Run()
       
       case eHSOpenStream:
       {
-	FString _sCameraName  = m_rStreamReader.GetCameraName();
-	
-	FString _sOutFilename( 0, "%s/HL_%s_%010d.mp4", (const char*)m_sDestination, (const char*)_sCameraName, time(NULL) ); 
+	FString   _sCameraName  = m_rStreamReader.GetCameraName();
+	FDateTime _dtNow( TRUE, TRUE );
+	FString   _sOutFilename( 0, "%s/HL_%s_%s.mp4", (const char*)m_sDestination, (const char*)_sCameraName, (const char*)_dtNow.GetDateTime( "%A%-%M%-%G%_%h%%m%%s%" ) ); 
 	
 	m_pAVEncoder = new CAVEncoder();
 	if ( m_pAVEncoder == NULL )
