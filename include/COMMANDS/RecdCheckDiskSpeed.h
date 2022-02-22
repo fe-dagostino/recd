@@ -84,13 +84,12 @@ public:
     {
       _ffile.Open( FREAD_WRITE_OPEN, 0, FCREATE_ALWAYS, 0 );
       
-      
       //Reset SW
       _swOperation.Reset();
       
       // Write 1 Kb for _iSize times
-      for ( register int cntW = 0; cntW < _iSize; cntW++ )
-	_ffile.Write( _pBuffer, _dwSizeBytes );
+      for ( int cntW = 0; cntW < _iSize; cntW++ )
+        _ffile.Write( _pBuffer, _dwSizeBytes );
       
       _ffile.Flush();
       
@@ -102,8 +101,8 @@ public:
       _swOperation.Reset();
        
       // Read 1 Kb for _iSize times
-      for ( register int cntR = 0; cntR < _iSize; cntR++ )
-	_ffile.Read( _pBuffer, _dwSizeBytes, &_dwGotBytes );
+      for ( int cntR = 0; cntR < _iSize; cntR++ )
+        _ffile.Read( _pBuffer, _dwSizeBytes, &_dwGotBytes );
       
       _dReadTime  = _swOperation.Peek();
       
@@ -129,8 +128,8 @@ public:
     // Release tmp buffer.
     if ( _pBuffer != NULL )
     {
-	delete [] _pBuffer;
-	_pBuffer = NULL;
+      delete [] _pBuffer;
+      _pBuffer = NULL;
     }
 
     return _retVal;
