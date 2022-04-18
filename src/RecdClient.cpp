@@ -23,6 +23,10 @@
 
 #include "FMutexCtrl.h"
 #include "FTcpConnection.h"
+#include "LOGGING/FLogger.h"
+
+
+USING_NAMESPACE_LOGGING
 
 GENERATE_CLASSINFO( RecdClient, FObject )
 
@@ -158,6 +162,8 @@ int 	RecdClient::EstimateTime( double dSize, bool bRender, bool bHighlights, boo
   
   if ( m_pRciClient->Execute( _argsRes, "ESTIMATE TIME", _argsParams, m_iReadTimeout ) == rciError )
   {
+    ERROR_INFO( FString( 0, "FAILED To Estimate TIME [%f]", dSize), EstimateTime() )
+
     Disconnect();
     
     return _iRetVal;
@@ -264,14 +270,19 @@ bool 	RecdClient::Connect()
   FMutexCtrl _mtxCtrl( m_mtxClient );
   
   if ( m_pRciClient != NULL )
+  {
+    LOG_INFO( "Rci Client already connected.", Connect() )
     return true;
-  
+  }
   m_pRciClient = new FRciClient( 
                                 new FTcpConnection( new FTcpConnectionInfo( m_sRemoteAddr, m_wRemotePort ) ),
 				new RecdParser()
                                );
   if ( m_pRciClient == NULL )
+  {
+    ERROR_INFO( FString( 0, "FAILED Create a new istance for FRciClient [%s] [%u]", (const CHAR*)m_sRemoteAddr, m_wRemotePort ), Connect() )
     return FALSE;
+  }
   
   return m_pRciClient->Open();
 }
@@ -281,7 +292,10 @@ bool 	RecdClient::Disconnect()
   FMutexCtrl _mtxCtrl( m_mtxClient );
   
   if ( m_pRciClient == NULL )
+  {
+    LOG_INFO( "Rci Client is not connected.", Disconnect() )
     return false;
+  }
   
   m_pRciClient->Close();
   
