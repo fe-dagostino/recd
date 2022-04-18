@@ -3,9 +3,10 @@ cmake_minimum_required (VERSION 2.6)
 project(recd)
 
 include_directories( ./include/ )
-include_directories( ../../FEDLibrary/source/template_include/ )
-include_directories( ../../FEDLibrary/source/include/ )
-include_directories( ../libavcpp/include )
+include_directories( ${CMAKE_INSTALL_PREFIX}/include/fedlibrary/include )
+include_directories( ${CMAKE_INSTALL_PREFIX}/include/fedlibrary/include/RCI )
+include_directories( ${CMAKE_INSTALL_PREFIX}/include/fedlibrary/template_include )
+include_directories( ${CMAKE_INSTALL_PREFIX}/include/libav++ )
 
 IF(NOT CMAKE_BUILD_TYPE )
   SET(CMAKE_BUILD_TYPE Release CACHE STRING
@@ -18,25 +19,25 @@ IF( CMAKE_BUILD_TYPE STREQUAL "Debug" )
         -debug
      )
   set(  RECD_CLI_VERSION
-        -2.0.1-debug
+        -2.0.2-debug
      )
   set(  LIBAVCPP_VER
-	-3.2.0-debug
+        -3.3.0-debug
     )
   set(  FEDLIB_VER
-        -3.0.2-debug
+        -3.2.0-debug
      )
 ELSE()
   set(  RECD_VERSION
      )
   set(  RECD_CLI_VERSION
-        -2.0.1
+        -2.0.2
      )
   set(  LIBAVCPP_VER
-	-3.2.0
+        -3.3.0
     )
   set(  FEDLIB_VER
-        -3.0.2
+        -3.2.0
      )
 ENDIF()
 
@@ -104,13 +105,13 @@ set(  RECD_CLI_LIBRARIES
 
 set(  RECD_LIBRARIES
       pthread
-      libavcpp${LIBAVCPP_VER}
+      av++${LIBAVCPP_VER}
       fedlibrary${FEDLIB_VER}
 )
 
 set(  CAPTURE_LIBRARIES
       pthread
-      libavcpp${LIBAVCPP_VER}
+      av++${LIBAVCPP_VER}
       fedlibrary${FEDLIB_VER}
 )
 
