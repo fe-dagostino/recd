@@ -23,6 +23,12 @@
 
 #include "LOGGING/FLogger.h"
 
+#ifdef _WIN32
+# define CFG_FILENAME  "recd.cfg"
+#else
+# define CFG_FILENAME  "./config/recd.cfg"
+#endif
+
 USING_NAMESPACE_LOGGING
 
 GENERATE_CLASSINFO( Recd, FService )
@@ -31,13 +37,14 @@ Recd::Recd( int argc, char* argv[] )
  : FService(
                  FSP_REALTIME,
                  TRUE,
-                 new RecdEvents( *this ),
+                 new RecdEvents( *this, CFG_FILENAME ),
                  "Recording Daemon",
-                 MAKEVERSION( 1,3,5,0 ),
+                 MAKEVERSION( 1,3,5,1 ),
                  argc, argv
               )
 ENTER(Recd())
-
+  // @todo
+  //new RecdEvents( *this )
 EXIT
 
 Recd::~Recd()
