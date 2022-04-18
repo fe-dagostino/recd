@@ -308,7 +308,7 @@ VOID   RecdRenderEncoder::SetParameters( const FString& sDestination )
   FMutexCtrl _mtxCtrl( m_mtxEncoder );
 
   // Send a signal to all rendering threads in order to start blending on current frame.
-  for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+  for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
   {
     m_pRenderThreads[iRenderThread]->Reset();
   }
@@ -391,7 +391,7 @@ VOID	RecdRenderEncoder::Run()
 	
 	int _iWidth  = RecdConfig::GetInstance().GetRenderWidth ( NULL );
 	int _iHeight = RecdConfig::GetInstance().GetRenderHeight( NULL );
-	if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
+	if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, AV_PIX_FMT_RGBA ) != eAVSucceded )
 	{
 	  ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgFilename ), Run() )
 	
@@ -415,12 +415,12 @@ VOID	RecdRenderEncoder::Run()
 	}
 	
 	// Initialize background mask with background image.
-	if ( m_rgbaMaskBkg.load( (const char*)sBkgMaskFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
+	if ( m_rgbaMaskBkg.load( (const char*)sBkgMaskFilename, _iWidth, _iHeight, AV_PIX_FMT_RGBA ) != eAVSucceded )
 	{
 	  ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgMaskFilename ), Run() )
 	  
 	  LOG_INFO( "Initialize BACKGROUND MASK using BACKGROUND IMAGE -- Check CONFIGURATION ...", Run() )
-	  m_rgbaMaskBkg.init( m_rgbaBkg, _iWidth, _iHeight, PIX_FMT_RGBA );
+	  m_rgbaMaskBkg.init( m_rgbaBkg, _iWidth, _iHeight, AV_PIX_FMT_RGBA );
 	}
 
 	m_pAVEncoder = new CAVEncoder();
@@ -438,11 +438,11 @@ VOID	RecdRenderEncoder::Run()
 					    AV_ENCODE_VIDEO_STREAM|AV_ENCODE_AUDIO_STREAM,
 					    _iWidth,
 					    _iHeight,
-					    PIX_FMT_YUV420P,
+					    AV_PIX_FMT_YUV420P,
 					    RecdConfig::GetInstance().GetRenderFps       ( NULL ),
 					    RecdConfig::GetInstance().GetRenderGoP       ( NULL ),
 					    RecdConfig::GetInstance().GetRenderBitRate   ( NULL ),
-					    (CodecID)RecdConfig::GetInstance().GetRenderVideoCodec( NULL ),
+					    (AVCodecID)RecdConfig::GetInstance().GetRenderVideoCodec( NULL ),
 					    RecdConfig::GetInstance().GetRenderVideoCodecProfile( NULL )
 					);
 	if ( _avRes != eAVSucceded )
@@ -501,13 +501,13 @@ VOID	RecdRenderEncoder::Run()
 	}
 
 	// Send a signal to all rendering threads in order to start blending on current frame.
-	for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+	for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
 	{
 	  m_pRenderThreads[iRenderThread]->SignalingBlending();
 	}
 	
 	BOOL _bAllDone = TRUE;
-	for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+	for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
 	{
 	  _bAllDone &= m_pRenderThreads[iRenderThread]->WaitingBlending( _dFPS * 1000 );
 	}
@@ -515,7 +515,7 @@ VOID	RecdRenderEncoder::Run()
 	if ( _bAllDone )
 	{
 	  // initialize autput frame.
-	  _avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
+	  _avFrameYUV.init( m_rgbaBkg, -1, -1, AV_PIX_FMT_YUV420P );
 	
 	  if ( m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR ) != eAVSucceded )
 	  {
@@ -524,6 +524,14 @@ VOID	RecdRenderEncoder::Run()
 	    SetStatus( eREReleasing );
 	    break;
 	  }
+
+	  if ( m_pAVEncoder->flush( AV_INTERLEAVED_VIDEO_WR ) != eAVSucceded )
+	  {
+	    ERROR_INFO( "Failed to flush buffers.", Run() )
+	    
+	    SetStatus( eREReleasing );
+	    break;
+          }
 	}
 	
 	// Just count and log average fps
@@ -544,7 +552,7 @@ VOID	RecdRenderEncoder::Run()
       case eREReleasing:
       {
 	// Send a signal to all rendering threads in order to start blending on current frame.
-	for ( register INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
+	for ( INT iRenderThread = 0; iRenderThread < RecdEncoderCollector::GetInstance().GetRawEncoders()->GetSize(); iRenderThread++ )
 	{
 	  m_pRenderThreads[iRenderThread]->SignalingBlending();
 	}

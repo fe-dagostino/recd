@@ -199,7 +199,7 @@ VOID	RecdHighLightsEncoder::Run()
 	{
 	  //Loading background image.
 	  FString sBkgFilename     = RecdConfig::GetInstance().GetHighLightsBackground( _sCameraName, NULL );
-	  if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
+	  if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, AV_PIX_FMT_RGBA ) != eAVSucceded )
 	  {
 	    ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgFilename ), Run() )
 	  }
@@ -237,11 +237,11 @@ VOID	RecdHighLightsEncoder::Run()
 			      AV_ENCODE_VIDEO_STREAM|AV_ENCODE_AUDIO_STREAM,
 			      _iWidth,
 			      _iHeight,
-			      PIX_FMT_YUV420P,
+			      AV_PIX_FMT_YUV420P,
 			      RecdConfig::GetInstance().GetHighLightsEncoderFps       ( _sCameraName, NULL ),
 			      RecdConfig::GetInstance().GetHighLightsEncoderGoP       ( _sCameraName, NULL ),
 			      RecdConfig::GetInstance().GetHighLightsEncoderBitRate   ( _sCameraName, NULL ),
-			      (CodecID)RecdConfig::GetInstance().GetHighLightsEncoderVideoCodec( _sCameraName, NULL ),
+			      (AVCodecID)RecdConfig::GetInstance().GetHighLightsEncoderVideoCodec( _sCameraName, NULL ),
 			      RecdConfig::GetInstance().GetHighLightsEncoderVideoCodecProfile( _sCameraName, NULL )
 			  );
 	if ( _avRes != eAVSucceded )
@@ -376,7 +376,7 @@ VOID	RecdHighLightsEncoder::Run()
 		m_rgbaBkg.blend( _avRenderPos, *_pMbxItem->GetImage() );
 		
 		// initialize autput frame.
-		_avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
+		_avFrameYUV.init( m_rgbaBkg, -1, -1, AV_PIX_FMT_YUV420P );
 		
 		eResult = m_pAVEncoder->write( &_avFrameYUV, AV_INTERLEAVED_VIDEO_WR );
 	      }

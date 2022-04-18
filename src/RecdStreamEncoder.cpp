@@ -264,7 +264,7 @@ VOID	RecdStreamEncoder::Run()
 	{
 	  //Loading background image.
 	  FString sBkgFilename     = RecdConfig::GetInstance().GetEncoderBackground( _sCameraName, NULL );
-	  if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, PIX_FMT_RGBA ) != eAVSucceded )
+	  if ( m_rgbaBkg.load( (const char*)sBkgFilename, _iWidth, _iHeight, AV_PIX_FMT_RGBA ) != eAVSucceded )
 	  {
 	    ERROR_INFO( FString( 0, "Error loading [%s]", (const char*)sBkgFilename ), Run() )
 	  }
@@ -302,11 +302,11 @@ VOID	RecdStreamEncoder::Run()
 					    AV_ENCODE_VIDEO_STREAM|AV_ENCODE_AUDIO_STREAM,
 					    _iWidth,
 					    _iHeight,
-					    PIX_FMT_YUV420P,
+					    AV_PIX_FMT_YUV420P,
 					    RecdConfig::GetInstance().GetEncoderFps       ( _sCameraName, NULL ),
 					    RecdConfig::GetInstance().GetEncoderGoP       ( _sCameraName, NULL ),
 					    RecdConfig::GetInstance().GetEncoderBitRate   ( _sCameraName, NULL ),
-					    (CodecID)RecdConfig::GetInstance().GetEncoderVideoCodec( _sCameraName, NULL ),
+					    (AVCodecID)RecdConfig::GetInstance().GetEncoderVideoCodec( _sCameraName, NULL ),
 					    RecdConfig::GetInstance().GetEncoderVideoCodecProfile( _sCameraName, NULL )
 					);
 	if ( _avRes != eAVSucceded )
@@ -435,7 +435,7 @@ VOID	RecdStreamEncoder::Run()
 		pAVImage->init( *_pMbxItem->GetImage(), 
 				_iRenderWidth, 
 				_iRenderHeight, 
-				PIX_FMT_RGBA,
+				AV_PIX_FMT_RGBA,
 				_dwEncoderOpts
 			      );
 		
@@ -456,7 +456,7 @@ VOID	RecdStreamEncoder::Run()
 				   *_pMbxItem->GetImage(), 
 				   _avAlphaBlendingRect.getWidth(), 
 				   _avAlphaBlendingRect.getHeight(), 
-				   PIX_FMT_RGBA,
+				   AV_PIX_FMT_RGBA,
 				   _dwEncoderOpts
 			         );
 	
@@ -464,7 +464,7 @@ VOID	RecdStreamEncoder::Run()
 		m_rgbaBkg.blend( _avAlphaBlendingPos, _avFrameRGBA );
 
 		// initialize autput frame.
-		_avFrameYUV.init( m_rgbaBkg, -1, -1, PIX_FMT_YUV420P );
+		_avFrameYUV.init( m_rgbaBkg, -1, -1, AV_PIX_FMT_YUV420P );
 	      }
 	      else
 	      {
@@ -473,7 +473,7 @@ VOID	RecdStreamEncoder::Run()
 				  *_pMbxItem->GetImage(),
 				  m_pAVEncoder->getVideoWidth(),
 				  m_pAVEncoder->getVideoHeight(),
-				  PIX_FMT_YUV420P,
+				  AV_PIX_FMT_YUV420P,
 				  _dwEncoderOpts
 			        );
 	      }
@@ -489,6 +489,17 @@ VOID	RecdStreamEncoder::Run()
 		  SetStatus( eSEReleasing );
 	      }
 	      
+	      // Flushing buffers.
+	      eResult = m_pAVEncoder->flush( AV_INTERLEAVED_VIDEO_WR );
+	      
+	      // Check for a possible error during encoding.
+	      if ( eResult != eAVSucceded )
+	      {
+		  ERROR_INFO( "Failed to flush buffer.", Run() )
+		  
+		  SetStatus( eSEReleasing );
+	      }
+
 	      // Just count and log average fps
 	      if (_swFpsCount.Peek() >= 1.0 )
 	      {
