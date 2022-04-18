@@ -26,17 +26,17 @@ public:
     return &m_avImage;
   }
   
-  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time )
+  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time ) override
   {
      printf( "Got Video KEY Frame ...\r\n" );
-     m_avImage.init( pAVFrame, pAVCodecCtx, -1, -1, PIX_FMT_RGB32 );
+     m_avImage.init( pAVFrame, pAVCodecCtx, -1, -1, AV_PIX_FMT_RGB32 );
      
      
      printf( "Opening Output file ...\r\n" );
-     if ( m_avEncoder.open( m_sOutputFilename, AV_ENCODE_VIDEO_STREAM, m_avImage.getWidth(), m_avImage.getHeight(), PIX_FMT_RGB32, 1, 1, 0, CODEC_ID_PNG, 0 ) != eAVSucceded )
+     if ( m_avEncoder.open( m_sOutputFilename, AV_ENCODE_VIDEO_STREAM, m_avImage.getWidth(), m_avImage.getHeight(), AV_PIX_FMT_RGB32, 1, 1, 0, AV_CODEC_ID_PNG, 0 ) != eAVSucceded )
      {
-	printf( "Opening Output file FAILED\r\n" );
-	return;
+       printf( "Opening Output file FAILED\r\n" );
+       return;
      }
      
      printf( "Opening Output file  DONE\r\n" );
@@ -44,30 +44,37 @@ public:
      printf( "Writing Output file ...\r\n" );
      if ( m_avEncoder.write( &m_avImage, 0 ) != eAVSucceded )
      {
-	printf( "Writing Output file FAILED\r\n" );
+       printf( "Writing Output file FAILED\r\n" );
      }
      
      printf( "Closing Output file ...\r\n" );
      if ( m_avEncoder.close() != eAVSucceded )
      {
-	printf( "Closing Output file FAILED\r\n" );
+       printf( "Closing Output file FAILED\r\n" );
      }
   }
   
-  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time )
+  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time ) override
   {
-     return true;
+    return true;
   }
   
-  virtual bool   OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pst )
+  virtual bool   OnFilteredVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pst ) override
   {
-    /* Nothing to do */  
+    /* Nothing to do */
+    return true;
   }
   
-  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time )
+  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double time ) override
   {
-     return true;
+    return true;
   }
+
+  virtual bool   OnFilteredAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecContext, double pts ) override
+  {
+    return true;
+  }
+
 
 private:
   FString          m_sOutputFilename;  
