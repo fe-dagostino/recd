@@ -26,13 +26,6 @@ USING_NAMESPACE_LOGGING
 GENERATE_CLASSINFO( RecdConfig, FSingleton )
 IMPLEMENT_SINGLETON( RecdConfig )
 
-#ifdef _WIN32
-# define CFG_FILENAME  "recd.cfg"
-#else
-# define CFG_FILENAME  "/etc/recd/recd.cfg"
-#endif
-
-
 /////////////////////////////////////
   //
    //
@@ -1078,7 +1071,12 @@ WORD	RecdConfig::GetCmdServerPort( BOOL* pbStored ) const
 
 VOID     RecdConfig::OnInitialize()
 {
-  m_cfg.SetFileName( CFG_FILENAME );
+
+}
+
+VOID	RecdConfig::Load( const FString& sCfgFile )
+{
+  m_cfg.SetFileName( sCfgFile );
 
   FTRY
   {
@@ -1088,16 +1086,17 @@ VOID     RecdConfig::OnInitialize()
   {
     switch( ex.GetErrorCode() )
     {
-	case FConfigFileException::CFG_FILE_NOT_FOUND :
-	{
-	  FString sMsg( 0,"  Failed to open [%s]", (const char*)m_cfg.GetFileName() );
-	  
-	  THROW_MSG_EXCEPTION( RecdConfigException, sMsg, RecdConfigException::CFG_FILE_NOT_FOUND_OR_INACCESSIBLE, OnInitialize()  )
-	}; break;
-	default:
-	{
-	  FString sMsg( 0,"  Error [%X] loading [%s]", ex.GetErrorCode(), (const char*)m_cfg.GetFileName() );
-	}; break;
+      case FConfigFileException::CFG_FILE_NOT_FOUND :
+      {
+        FString sMsg( 0,"  Failed to open [%s]", (const char*)m_cfg.GetFileName() );
+
+        THROW_MSG_EXCEPTION( RecdConfigException, sMsg, RecdConfigException::CFG_FILE_NOT_FOUND_OR_INACCESSIBLE, Load()  )
+      }; break;
+
+      default:
+      {
+        FString sMsg( 0,"  Error [%X] loading [%s]", ex.GetErrorCode(), (const char*)m_cfg.GetFileName() );
+      }; break;
     }
   }
 }

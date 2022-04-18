@@ -46,6 +46,11 @@ protected:
   VOID         OnFinalize();
 
 public:
+
+  /***/
+  VOID	       Load( const FString& sCfgFile );
+
+
   /////////////////////////////
   // IP CAMERAS SECTION 
   ///////////////////////
