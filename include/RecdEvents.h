@@ -35,7 +35,7 @@ class RecdEvents : public FServiceEventInterface
 public:
   /**
    */
-  RecdEvents( const FService& rService );
+  RecdEvents( const FService& rService, const FString& sCfgFile );
   /**
    */
   virtual ~RecdEvents();
@@ -90,6 +90,7 @@ protected:
 private:
   BOOL            m_bExit;
   RecdCmdServer   m_cmdServer;
+  FString         m_sCfgFile;
 };
 
 #endif

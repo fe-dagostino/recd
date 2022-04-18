@@ -40,8 +40,8 @@ USING_NAMESPACE_FED
 USING_NAMESPACE_LOGGING
 
 
-RecdEvents::RecdEvents( const FService& rService )
- : m_cmdServer( rService ) 
+RecdEvents::RecdEvents( const FService& rService, const FString& sCfgFile )
+ : m_cmdServer( rService ), m_sCfgFile(sCfgFile)
 {
   
 }
@@ -60,6 +60,7 @@ ENTER( OnStart() )
   FTRY
   {
     RecdConfig::Initialize();
+    RecdConfig::GetInstance().Load(m_sCfgFile);
   }
   FCATCH( FException, ex )
   {
