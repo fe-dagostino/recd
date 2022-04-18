@@ -23,7 +23,7 @@
 #include "LOGGING/FLogger.h"
 
 #include "avimage.h"
-#include "avfiltergraph.h"
+#include "videofiltergraph.h"
 
 
 GENERATE_CLASSINFO( RecdStreamReader, FLogThread ) 
@@ -213,7 +213,7 @@ void   RecdStreamReader::OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStrea
 
 bool   RecdStreamReader::OnVideoFrame( 
 					const  AVFrame* pAVFrame,
-					const AVStream* pAVStream,
+					const  AVStream* pAVStream,
 					const  AVCodecContext* pAVCodecCtx, 
 					double pts 
 				     )
@@ -260,7 +260,7 @@ bool   RecdStreamReader::OnVideoFrame(
 	    pAVCodecCtx,
 	    -1,
 	    -1, 
-	    PIX_FMT_RGBA, 
+	    AV_PIX_FMT_RGBA,
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL ) 
 	);
 
@@ -279,7 +279,7 @@ bool   RecdStreamReader::OnVideoFrame(
 	    pAVCodecCtx,
 	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectWidth( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderWidth( m_sIpCamera, NULL ), 
 	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectHeight( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderHeight( m_sIpCamera, NULL ), 
-	    _bBkgStatus?PIX_FMT_RGBA:PIX_FMT_YUV420P,
+	    _bBkgStatus?AV_PIX_FMT_RGBA:AV_PIX_FMT_YUV420P,
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL )
 	);
     m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage, pts ) );
@@ -295,7 +295,7 @@ bool   RecdStreamReader::OnVideoFrame(
 }
 
 bool    RecdStreamReader::OnFilteredVideoFrame( 
-						const AVFilterBufferRef* pAVFilterBufferRef,
+						const AVFrame* pAVFrame,
 						const AVStream* pAVStream,
 						const AVCodecContext* pAVCodecCtx, 
 						double pts
@@ -334,7 +334,7 @@ bool    RecdStreamReader::OnFilteredVideoFrame(
     CAVImage*  _pAVRawImage      = new CAVImage();
     
     // Initialized to original W:H
-    _pAVRawImage->init( pAVFilterBufferRef, pAVCodecCtx->width, pAVCodecCtx->height ); 
+    _pAVRawImage->init( pAVFrame, pAVCodecCtx->width, pAVCodecCtx->height );
 
     m_pMbxRawItems->Write       ( new RecdMbxItem( _pAVRawImage, pts      ) );
   }
@@ -347,11 +347,11 @@ bool    RecdStreamReader::OnFilteredVideoFrame(
     // Initialized to HIGHLIGHTS VIDEO SETTINGS W:H when background is not active
     // Initialized to HIGHLIGHTS RECT           W:H when background is active
     _pHighLightsImage->init( 
-	    pAVFilterBufferRef, 
+	    pAVFrame,
 	    pAVCodecCtx->width, pAVCodecCtx->height,
 	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectWidth( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderWidth( m_sIpCamera, NULL ), 
 	    _bBkgStatus?RecdConfig::GetInstance().GetHighLightsRectHeight( m_sIpCamera, NULL ):RecdConfig::GetInstance().GetHighLightsEncoderHeight( m_sIpCamera, NULL ), 
-	    _bBkgStatus?PIX_FMT_RGBA:PIX_FMT_YUV420P,
+	    _bBkgStatus?AV_PIX_FMT_RGBA:AV_PIX_FMT_YUV420P,
 	    RecdConfig::GetInstance().GetReaderRescaleOptions( m_sIpCamera, NULL )
 	);
     m_pMbxHighLightsItems->Write( new RecdMbxItem( _pHighLightsImage, pts ) );
@@ -387,6 +387,17 @@ bool    RecdStreamReader::OnAudioFrame(
   
   return true;
 }
+
+bool    RecdStreamReader::OnFilteredAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecContext, double pts )
+{
+  (void)pAVFrame;
+  (void)pAVStream;
+  (void)pAVCodecContext;
+  (void)pts;
+
+  return true;
+}
+
 
 BOOL	RecdStreamReader::Initial()
 { 
@@ -432,14 +443,14 @@ VOID	RecdStreamReader::Run()
 	// TRUE if filters has been enabled False otherwise.
 	m_bFilters         = RecdConfig::GetInstance().GetReaderFiltersStatus( m_sIpCamera, NULL );
 	
-	CAVFilterGraph* _pAVFilterGraph = NULL;
+	CVideoFilterGraph* _pAVFilterGraph = NULL;
 	if ( m_bFilters == TRUE )
 	{
 	  FString _sSectionName = RecdConfig::GetInstance().GetReaderFiltersSettings( m_sIpCamera, NULL );
 	  FString _sFiltersConf = RecdConfig::GetInstance().GetReaderFiltersConfiguration( _sSectionName, NULL );
 	  
 	  LOG_INFO( FString( 0, "FilterGraph Setting = [%s]", (const char*)_sFiltersConf ), Run() )
-	  _pAVFilterGraph =  new CAVFilterGraph( _sFiltersConf );
+	  _pAVFilterGraph =  new CVideoFilterGraph( _sFiltersConf );
 	}
 	
 	LOG_INFO( "Allocate new CAVDecoder", Run() )

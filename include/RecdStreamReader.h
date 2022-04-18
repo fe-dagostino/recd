@@ -55,8 +55,7 @@ public:
     eRSFlushing,
     eRSReleasing
   };
-  
-  
+
   /**
    *
    */
@@ -115,28 +114,36 @@ protected:
   /**
    *  Event will be raised just in presence of one key frame.
    */
-  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );
+  virtual void   OnVideoKeyFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts ) override;
 
   /**
    *  Event will be raised for each frame coming from the stream.
    *  Return value true in order to continue decoding, false to interrupt.
    *  Note: this event will be raised also for key frame.
    */
-  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );
+  virtual bool   OnVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts ) override;
 
   /**
    *  Event will be raised for each frame coming from the stream.
    *  Return value true in order to continue decoding, false to interrupt.
    *  Note: this event will be raised for each frame.
    */
-  virtual bool   OnFilteredVideoFrame( const AVFilterBufferRef* pAVFilterBufferRef, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );
+  virtual bool   OnFilteredVideoFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts ) override;
   
   /**
     *  Event will be raised for each frame coming from the stream.
     *  Return value true in order to continue decoding, false to interrupt.
     */
-  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts );  
+  virtual bool   OnAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecCtx, double pts ) override;
   
+  /**
+    *  Event will be raised for each frame coming from the stream.
+    *  Return value true in order to continue decoding, false to interrupt.
+    *  Note: this event will be raised for each filtered audio frame.
+    */
+  virtual bool   OnFilteredAudioFrame( const AVFrame* pAVFrame, const AVStream* pAVStream, const AVCodecContext* pAVCodecContext, double pts ) override;
+
+
 // Implements virtual method defined in FThread  
 protected:
   
